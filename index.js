@@ -11,6 +11,7 @@
  */
 require('./settings')
 const { Boom } = require('@hapi/boom')
+const { randomBytes } = require('crypto')
 const fs = require('fs')
 const chalk = require('chalk')
 const FileType = require('file-type')
@@ -49,6 +50,8 @@ const store = require('./lib/lightweight_store')
 const { ensureRuntimeDirs, readJson } = require('./lib/runtime')
 const { normalizeWhatsAppNumber } = require('./lib/phone')
 const { restoreSessionBundle } = require('./lib/sessionBundle')
+const { resolveHostPairingMode, resolveHostMenuChoice, renderTerminalQr } = require('./lib/hostPairing')
+const { createHostPairingServer } = require('./lib/hostPairingWeb')
 const selfChatModule = require('./lib/selfChat')
 const { selfChatSendOptions, isSelfChat, createSelfChatSendQueue } = selfChatModule
 const enqueueSelfChatSend = typeof createSelfChatSendQueue === 'function'
@@ -211,8 +214,20 @@ global.themeemoji = "•"
 const authDir = process.env.AUTH_DIR || './session'
 
 let sessionBundle = process.env.SESSION_BUNDLE || process.env.SESSION_ID || ''
-let terminalPairingNumber = ''
+const pairingWebEnabled = String(process.env.PAIRING_WEB_ENABLED || '').trim().toLowerCase() === 'true'
+const pairingWebToken = process.env.PAIRING_WEB_TOKEN || randomBytes(32).toString('base64url')
+const hostPairingRuntime = { connection: 'starting', ready: false, connected: false, registered: false, qr: '', error: '', mode: null }
+let hostWebPairingMode = null
+let hostWebPairingCodeInFlight = false
+let hostPairingWebServer = null
+const configuredHostPairingMode = resolveHostPairingMode(process.env)
+let terminalQrMode = !pairingWebEnabled && configuredHostPairingMode?.mode === 'qr'
+let terminalPairingNumber = !pairingWebEnabled && configuredHostPairingMode?.mode === 'pair' ? configuredHostPairingMode.phone : ''
 let terminalPairingStopped = false
+if (pairingWebEnabled && !process.env.PAIRING_WEB_TOKEN) {
+    console.log(`[pairing-web] Private access key (copy from host logs and keep secret): ${pairingWebToken}`)
+    console.log('[pairing-web] Open your bot service URL followed by /pairing to link WhatsApp directly into AUTH_DIR.')
+}
 if (sessionBundle) {
     try {
         const imported = restoreSessionBundle(sessionBundle, authDir)
@@ -234,34 +249,102 @@ const question = (text) => {
     return Promise.reject(error)
 }
 
+function startHostPairingWebServer() {
+    if (!pairingWebEnabled || hostPairingWebServer) return Promise.resolve()
+    if (pairingWebToken.length < 24) {
+        const error = new Error('PAIRING_WEB_TOKEN must be at least 24 characters when configured.')
+        error.code = 'PAIRING_WEB_CONFIG_INVALID'
+        return Promise.reject(error)
+    }
+    const rawPort = process.env.PAIRING_WEB_PORT || process.env.PORT || '8000'
+    const port = Number(rawPort)
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        const error = new Error('PAIRING_WEB_PORT/PORT must be an integer from 1 to 65535.')
+        error.code = 'PAIRING_WEB_CONFIG_INVALID'
+        return Promise.reject(error)
+    }
+    const host = process.env.PAIRING_WEB_HOST || '0.0.0.0'
+    const pairing = createHostPairingServer({
+        token: pairingWebToken,
+        getRuntime: () => hostPairingRuntime,
+        onMode: async (mode) => {
+            hostWebPairingMode = mode
+            hostPairingRuntime.mode = mode
+            hostPairingRuntime.error = ''
+            if (!activeSocket && !socketStartInFlight && !global.__updateRestarting) {
+                startXeonBotInc().catch(error => {
+                    hostPairingRuntime.error = 'The bot could not restart its WhatsApp connection. Check host logs.'
+                    console.error('[pairing-web] Could not start bot socket:', error.message || error)
+                })
+            }
+        },
+        requestPairingCode: async (phone) => {
+            if (hostWebPairingCodeInFlight) throw Object.assign(new Error('A code request is already in progress.'), { statusCode: 429 })
+            if (!activeSocket || !hostPairingRuntime.ready) throw Object.assign(new Error('The WhatsApp connection is not ready.'), { statusCode: 503 })
+            hostWebPairingCodeInFlight = true
+            try {
+                const code = await activeSocket.requestPairingCode(phone)
+                hostPairingRuntime.error = ''
+                return code
+            } catch (error) {
+                hostPairingRuntime.error = 'WhatsApp did not confirm the pairing-code request. Try QR mode or retry later.'
+                throw error
+            } finally {
+                hostWebPairingCodeInFlight = false
+            }
+        }
+    })
+    hostPairingWebServer = pairing.server
+    return new Promise((resolve, reject) => {
+        const onError = error => { hostPairingWebServer = null; reject(error) }
+        pairing.server.once('error', onError)
+        pairing.server.listen(port, host, () => {
+            pairing.server.off('error', onError)
+            const address = pairing.server.address()
+            const boundPort = typeof address === 'object' && address ? address.port : port
+            console.log(`[pairing-web] Direct pairing page listening on ${host}:${boundPort}/pairing`)
+            resolve()
+        })
+    })
+}
 
 async function startXeonBotInc() {
     if (activeSocket || socketStartInFlight || global.__updateRestarting || terminalPairingStopped) return activeSocket
     socketStartInFlight = true
     try {
         // Supply SESSION_BUNDLE/SESSION_ID in the environment, or choose a
-        // session bundle or terminal-only pairing code at the host prompt.
+        // session bundle, direct host pairing code, or direct host QR from the prompt.
         let { state, saveCreds } = await useMultiFileAuthState(authDir)
-        if (!state.creds.registered && !sessionBundle && !terminalPairingNumber) {
+        hostPairingRuntime.registered = Boolean(state.creds.registered)
+        hostPairingRuntime.connected = false
+        await startHostPairingWebServer()
+        if (!pairingWebEnabled && !state.creds.registered && configuredHostPairingMode?.mode === 'invalid') {
+            throw new Error('Invalid PHONE_NUMBER or PAIRING_NUMBER. Use 8–15 digits including the country code, for example 254712345678.')
+        }
+        if (!state.creds.registered && !sessionBundle && !terminalPairingNumber && !terminalQrMode && !pairingWebEnabled) {
             const promptEnabled = process.env.SESSION_TERMINAL_PROMPT === 'true'
                 || (process.stdin.isTTY && process.env.SESSION_TERMINAL_PROMPT !== 'false')
             if (!promptEnabled) {
-                const error = new Error('No registered WhatsApp session. Set SESSION_BUNDLE in the environment or enable SESSION_TERMINAL_PROMPT=true for the terminal choice.')
+                const error = new Error('No registered WhatsApp session. Set SESSION_BUNDLE, use AUTH_METHOD=qr for direct host QR pairing, configure PHONE_NUMBER with AUTH_METHOD=pair, or enable SESSION_TERMINAL_PROMPT=true for the host menu.')
                 error.code = 'NO_SESSION_CONFIGURED'
                 throw error
             }
-            const choice = String(await question(chalk.bgBlack(chalk.greenBright('Choose terminal login:\n1. Paste SESSION_BUNDLE / SESSION_ID\n2. Enter phone number for a pairing code\nChoice [1/2]: ')))).trim()
-            if (choice === '2') {
-                terminalPairingNumber = normalizeWhatsAppNumber(await question(chalk.bgBlack(chalk.greenBright('Enter international phone number without +, spaces, or dashes:\nNumber: '))))
+            const choice = String(await question(chalk.bgBlack(chalk.greenBright('Choose how to connect this bot:\n1. Paste SESSION_BUNDLE from the pairing website\n2. Pair directly on this host with a phone-number code\n3. Pair directly on this host with a QR code\nChoice [1/2/3]: ')))).trim()
+            const hostChoice = resolveHostMenuChoice(choice)
+            if (!hostChoice) throw new Error('Choose 1, 2, or 3 and restart the bot.')
+            if (hostChoice === 'pair') {
+                terminalPairingNumber = normalizeWhatsAppNumber(await question(chalk.bgBlack(chalk.greenBright('Enter your international WhatsApp number with country code, digits only:\nNumber: '))))
                 if (!terminalPairingNumber) {
                     const error = new Error('Invalid phone number. Restart and enter a complete international number, for example 254712345678.')
                     error.code = 'NO_SESSION_CONFIGURED'
                     throw error
                 }
+            } else if (hostChoice === 'qr') {
+                terminalQrMode = true
             } else {
                 const pasted = await question(chalk.bgBlack(chalk.greenBright('Paste SESSION_BUNDLE (or SESSION_ID) and press Enter:\n')))
                 if (!String(pasted || '').trim()) {
-                    const error = new Error('No session bundle was pasted. Choose terminal pairing or add SESSION_BUNDLE to the environment.')
+                    const error = new Error('No session bundle was pasted. Choose a direct host method or add SESSION_BUNDLE to the environment.')
                     error.code = 'NO_SESSION_CONFIGURED'
                     throw error
                 }
@@ -270,8 +353,8 @@ async function startXeonBotInc() {
                 ;({ state, saveCreds } = await useMultiFileAuthState(authDir))
             }
         }
-        if (!state.creds.registered && !terminalPairingNumber) {
-            const error = new Error('The configured session is not registered. Generate a new SESSION_BUNDLE from the separate pairing site.')
+        if (!state.creds.registered && !terminalPairingNumber && !terminalQrMode && !pairingWebEnabled) {
+            const error = new Error('No usable WhatsApp session. Choose direct host pairing (code or QR) or provide SESSION_BUNDLE.')
             error.code = 'NO_SESSION_CONFIGURED'
             throw error
         }
@@ -439,6 +522,7 @@ async function startXeonBotInc() {
     XeonBotInc.serializeM = (m) => smsg(XeonBotInc, m, store)
 
     let terminalPairingRequested = false
+    let lastTerminalQr = ''
     const requestTerminalPairingCode = async () => {
         if (terminalPairingStopped || !terminalPairingNumber || terminalPairingRequested || state.creds.registered) return
         terminalPairingRequested = true
@@ -470,6 +554,25 @@ async function startXeonBotInc() {
         // start another lifecycle action.
         if (activeSocket !== XeonBotInc) return
         
+        if (connection) hostPairingRuntime.connection = connection
+        hostPairingRuntime.connected = connection === 'open'
+        hostPairingRuntime.registered = Boolean(XeonBotInc.authState?.creds?.registered)
+        if (qr) {
+            hostPairingRuntime.qr = qr
+            hostPairingRuntime.ready = true
+            hostPairingRuntime.error = ''
+        }
+        if (connection === 'open') {
+            hostPairingRuntime.registered = true
+            hostPairingRuntime.qr = ''
+            hostPairingRuntime.ready = false
+            hostPairingRuntime.error = ''
+        } else if (connection === 'close') {
+            hostPairingRuntime.connected = false
+            hostPairingRuntime.ready = false
+            hostPairingRuntime.qr = ''
+        }
+
         if (connection === 'connecting') {
             if (XeonBotInc.__connectingLogged) return
             XeonBotInc.__connectingLogged = true
@@ -482,6 +585,15 @@ async function startXeonBotInc() {
         // `open` is too late because `open` happens only after linking.
         if (qr && terminalPairingNumber) {
             await requestTerminalPairingCode()
+        }
+        if (qr && terminalQrMode && qr !== lastTerminalQr) {
+            lastTerminalQr = qr
+            console.log(chalk.green('\nScan this QR from WhatsApp → Linked devices → Link a device. The QR refreshes automatically if it expires.'))
+            try {
+                console.log(await renderTerminalQr(qr))
+            } catch (error) {
+                console.error(chalk.red(`Could not render the host QR code: ${error.message || error}`))
+            }
         }
         
         if (connection === "open") {
@@ -556,7 +668,13 @@ async function startXeonBotInc() {
             const statusCode = lastDisconnect?.error?.output?.statusCode
             const disconnectText = String(lastDisconnect?.error?.message || lastDisconnect?.error || '')
             const needsFreshPairing = statusCode === DisconnectReason.loggedOut || statusCode === 401
-            const terminalPairingPending = Boolean(terminalPairingNumber && !XeonBotInc.authState?.creds?.registered)
+            hostPairingRuntime.connection = 'close'
+            hostPairingRuntime.connected = false
+            hostPairingRuntime.ready = false
+            hostPairingRuntime.qr = ''
+            hostPairingRuntime.registered = Boolean(XeonBotInc.authState?.creds?.registered)
+            const hostWebPairingPending = Boolean(pairingWebEnabled && hostWebPairingMode && !XeonBotInc.authState?.creds?.registered)
+            const terminalPairingPending = Boolean((terminalPairingNumber || terminalQrMode) && !XeonBotInc.authState?.creds?.registered) || hostWebPairingPending
             const shouldReconnect = !needsFreshPairing && !global.__updateRestarting
             const isStreamConflict = statusCode === 440 || /stream errored.*conflict|conflict.*stream errored/i.test(disconnectText)
             const isRestartRequired = statusCode === DisconnectReason.restartRequired || /stream errored.*restart required|restart required/i.test(disconnectText)
@@ -610,17 +728,26 @@ async function startXeonBotInc() {
                 } catch (error) {
                     console.error('Error deleting session:', error)
                 }
-                console.log(chalk.red('Session logged out. Pair again using the separate pairing site, replace SESSION_BUNDLE, and restart the bot.'))
+                console.log(chalk.red('Session logged out. Restart and choose direct host pairing (code or QR), or use the pairing website to create a new SESSION_BUNDLE.'))
             }
 
             if (terminalPairingPending && !global.__updateRestarting) {
                 if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
+                    if (hostWebPairingPending) {
+                        try { rmSync(authDir, { recursive: true, force: true }) } catch (error) {
+                            console.error('[pairing-web] Could not clear incomplete unregistered auth files:', error.message || error)
+                        }
+                        hostPairingRuntime.error = 'WhatsApp rejected this link attempt. Select QR or code and try a fresh attempt.'
+                        console.error(chalk.red('WhatsApp rejected the bot-host pairing attempt. Incomplete unregistered auth files were cleared; the direct pairing page remains available so you can switch methods.'))
+                        return
+                    }
                     terminalPairingStopped = true
                     if (reconnectTimer) {
                         clearTimeout(reconnectTimer)
                         reconnectTimer = null
                     }
-                    console.error(chalk.red('WhatsApp rejected terminal phone-number linking with status 401. No device was linked. Use the pairing site QR flow to create SESSION_BUNDLE, then paste that bundle into the bot environment or terminal.'))
+                    const method = terminalQrMode ? 'host QR linking' : 'host phone-number linking'
+                    console.error(chalk.red(`WhatsApp rejected ${method} with status 401. No session was saved. Try the other direct-host method or use the pairing website.`))
                     return
                 }
                 reconnectAttempts = 0
@@ -711,7 +838,7 @@ async function startXeonBotInc() {
     } catch (error) {
         socketStartInFlight = false
         activeSocket = null
-        if (error?.code === 'NO_SESSION_CONFIGURED' || error?.code === 'SESSION_INPUT_CLOSED' || error?.code === 'ERR_USE_AFTER_CLOSE') {
+        if (error?.code === 'NO_SESSION_CONFIGURED' || error?.code === 'SESSION_INPUT_CLOSED' || error?.code === 'ERR_USE_AFTER_CLOSE' || error?.code === 'PAIRING_WEB_CONFIG_INVALID') {
             console.error(error.message)
             process.exit(1)
         }

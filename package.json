@@ -16,15 +16,16 @@
     "start:clean": "npm run cleanup && npm run start:optimized",
     "start:fresh": "npm run reset-session && npm start",
     "test": "node --test test/*.test.js",
-    "check": "node --check index.js && node --check main.js && npm test",
+    "check": "node --check index.js && node --check main.js && node --check lib/hostPairing.js && node --check lib/hostPairingWeb.js && npm test",
     "audit:menu": "node scripts/audit-menu-commands.js",
     "install:panel": "npm ci --omit=dev --no-audit --no-fund --prefer-offline && (npm rebuild sharp --foreground-scripts || echo 'Warning: sharp native build unavailable; core bot remains available')",
     "install:terminal": "npm ci --no-audit --no-fund --prefer-offline && (npm rebuild sharp --foreground-scripts || echo 'Warning: sharp native build unavailable; core bot remains available')",
-    "install:termux": "npm ci --omit=dev --ignore-scripts --no-audit --no-fund --prefer-offline && rm -rf node_modules/sharp && echo 'Termux mode: skipped unsupported sharp native module; core bot remains available'",
+    "install:termux": "npm ci --omit=dev --ignore-scripts --no-audit --no-fund --prefer-offline && npx patch-package && rm -rf node_modules/sharp && echo 'Termux mode: skipped unsupported sharp native module; core bot remains available'",
     "deploy:terminal": "npm run install:terminal && npm run start:terminal",
     "deploy:termux": "npm run install:termux && npm run start:termux",
     "install:force": "npm install --force",
-    "docker:build": "docker build -t leetechbot ."
+    "docker:build": "docker build -t leetechbot .",
+    "postinstall": "patch-package"
   },
   "keywords": [
     "whatsapp-bot",
@@ -64,6 +65,7 @@
     "node-id3": "^0.2.3",
     "node-webpmux": "^3.1.0",
     "node-youtube-music": "^0.8.0",
+    "patch-package": "^8.0.1",
     "performance-now": "^2.1.0",
     "phin": "^3.7.1",
     "pino": "^8.21.0",

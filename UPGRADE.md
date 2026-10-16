@@ -6,7 +6,7 @@ This release hardens the existing Baileys bot without removing its existing comm
 
 - **Secrets removed from source:** owner number, Giphy key, and provider keys are now read from `.env` or the host’s secret manager.
 - **Owner authorization fixed:** an unset `OWNER_NUMBER` can no longer authorize every sender because an empty string matched every JID.
-- **Startup made safe:** saved sessions reconnect silently; linking-code login is the default for new sessions and prompts directly for the phone number, while QR mode is available through `AUTH_METHOD=qr`.
+- **Startup made safe:** saved sessions reconnect silently; new sessions can use the protected bot-host `/pairing` website for direct QR/code linking, or the terminal code/QR/bundle menu when the host website is disabled.
 - **Message resilience added:** duplicate WhatsApp deliveries are ignored, command bursts are rate-limited, and lightweight health metrics are maintained in memory.
 - **State writes made safer:** new runtime helpers support atomic JSON replacement and safe fallback reads, preventing partially-written state files.
 - **Deployment scripts corrected:** the Docker image command is valid, the project has a reproducible `package-lock.json`, and `npm run check` performs syntax and test validation.
@@ -18,14 +18,14 @@ This release hardens the existing Baileys bot without removing its existing comm
 - **Complete chat modes:** `.mode public`, `.mode private`, `.mode group`, and `.mode dm` are persisted. `public` allows everyone in groups and DMs; `private` allows only the owner, sudo, or developer in groups and DMs; `group` allows everyone in groups only; and `dm` allows everyone in private chats only.
 - **Privacy improved:** example owner and premium data files no longer contain personal phone numbers.
 - **Panel deployment optimized:** Katabump can use `npm run install:panel` for lockfile-based production installs and `npm run start:panel` for a bounded-memory production process; npm audit, funding, and progress overhead are disabled through `.npmrc`.
-- **Terminal deployment added:** local VPS, Linux terminal, and SSH deployments can use `npm run deploy:terminal`; it installs dependencies, rebuilds `sharp`, and starts the bot with the direct pairing prompt.
+- **Terminal deployment added:** local VPS, Linux terminal, and SSH deployments can use `npm run deploy:terminal`; it installs dependencies, applies the Baileys pairing patch, rebuilds `sharp`, and starts the bot with the direct pairing website or optional host prompt.
 - **Termux compatibility improved:** native `sharp` loading is optional at startup, so pairing and core bot features can run on Android; sharp-based image commands report a clear feature-level warning if Android cannot build `sharp`.
 
 ## Secure setup
 
 1. Copy `.env.example` to `.env`.
 2. Set `OWNER_NUMBER` to the bot owner’s international number, digits only. The developer/super-owner support number is fixed in `settings.js` as `254116553618`, does not use an environment variable, and is included automatically by `.owner`.
-3. Leave `PHONE_NUMBER` empty if you want the startup prompt. The default is linking-code login; use `AUTH_METHOD=qr` and `PAIRING_CODE=false` only for QR login.
+3. For the direct bot-host website, set `PAIRING_WEB_ENABLED=true`, expose the bot's `PORT`, and keep `AUTH_DIR` persistent. Open the standalone pairing site's **On bot host** tab with the bot service URL (or visit its `/pairing` path), enter the private access key from host logs, then choose QR or code. Both link directly to the bot's own `AUTH_DIR`; no `SESSION_BUNDLE` copy is needed.
 4. Add provider keys only for services you actually use.
 5. Keep the `session/` directory private and never commit it.
 6. Install and validate with:
@@ -85,7 +85,7 @@ If WhatsApp displays “Waiting for this message” and the console reports `Bad
 
 The same recovery applies when libsignal reports `SessionError: Over 2000 messages into the future`. The bot logs the issue, closes the affected socket, and reconnects while preserving `AUTH_DIR`; the supervisor also restarts the process without renaming or deleting credentials. This prevents a transient decryption error from silently removing the linked device. Only an explicit WhatsApp logout (`401`/`loggedOut`) clears credentials and requires pairing again. If a Signal session is genuinely unrecoverable, stop the bot and reset `AUTH_DIR` manually after confirming that a new pairing is acceptable.
 
-To use QR instead, set `AUTH_METHOD=qr` and `PAIRING_CODE=false`. The linking-code prompt is never shown when a saved session already exists.
+To use direct QR pairing on the bot host, set `AUTH_METHOD=qr`; the QR is rendered in the host console and credentials are saved to `AUTH_DIR`. For interactive hosts, choose option 3 at startup. A saved session reconnects without showing the pairing menu.
 
 ## AI chatbot
 

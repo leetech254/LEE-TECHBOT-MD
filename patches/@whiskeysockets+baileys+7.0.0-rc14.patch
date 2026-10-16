@@ -1,0 +1,13 @@
+diff --git a/node_modules/@whiskeysockets/baileys/lib/Socket/socket.js b/node_modules/@whiskeysockets/baileys/lib/Socket/socket.js
+index ae34a8f..e337b12 100644
+--- a/node_modules/@whiskeysockets/baileys/lib/Socket/socket.js
++++ b/node_modules/@whiskeysockets/baileys/lib/Socket/socket.js
+@@ -604,7 +604,7 @@ export const makeSocket = (config) => {
+             name: '~'
+         };
+         ev.emit('creds.update', authState.creds);
+-        await sendNode({
++        await query({
+             tag: 'iq',
+             attrs: {
+                 to: S_WHATSAPP_NET,

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#07111f">
+  <title>LEE TECHBOT · Pair on this host</title>
+  <style>
+    :root{color-scheme:dark;--bg:#07111f;--panel:#102139;--line:#2d4766;--text:#f5f8ff;--muted:#a8b8ca;--mint:#5eead4;--blue:#89bcff;--bad:#ff8b9b}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(900px 500px at 12% 0%,#123d59 0,transparent 60%),linear-gradient(145deg,#07111f,#0c1d33);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--text);display:grid;place-items:center;padding:22px}
+    main{width:min(100%,620px)}.brand{display:flex;align-items:center;gap:12px;margin-bottom:20px}.mark{width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,var(--mint),var(--blue));display:grid;place-items:center;color:#051522;font-weight:950}.brand small{display:block;color:var(--muted)}.card{background:rgba(16,33,57,.94);border:1px solid var(--line);border-radius:22px;padding:clamp(20px,5vw,34px);box-shadow:0 25px 90px #0007}.eyebrow{font-size:.76rem;color:var(--mint);font-weight:850;letter-spacing:.12em;text-transform:uppercase}h1{font-size:clamp(1.8rem,6vw,2.5rem);line-height:1.1;letter-spacing:-.04em;margin:7px 0 10px}p{color:var(--muted);margin:0 0 18px}.field{display:block;width:100%;border:1px solid var(--line);border-radius:12px;background:#071525;color:var(--text);padding:13px 14px;font:inherit;outline:none}.field:focus{border-color:var(--blue);box-shadow:0 0 0 3px #89bcff22}.button{border:0;border-radius:12px;padding:13px 16px;background:linear-gradient(120deg,var(--mint),#9ccaff);color:#061522;font:inherit;font-weight:900;cursor:pointer}.button:disabled{opacity:.55;cursor:wait}.button.secondary{background:#142b47;border:1px solid var(--line);color:var(--text)}.row{display:flex;gap:10px;flex-wrap:wrap}.row .button{flex:1;min-width:180px}.status{margin:14px 0;padding:12px 14px;border:1px solid #284565;border-radius:12px;background:#09182a;color:var(--muted);font-size:.9rem}.status.good{border-color:#236b60;color:#b5f6e7}.status.bad{border-color:#864250;color:var(--bad)}.methods{display:none;margin-top:18px}.methods.visible{display:block}.method{margin-top:18px;padding-top:18px;border-top:1px solid #263e5b}.method[hidden]{display:none}.code{font:900 clamp(1.8rem,8vw,2.7rem)/1.1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.12em;text-align:center;margin:15px 0;color:white}.qr{display:block;max-width:min(100%,320px);background:white;padding:10px;border-radius:14px;margin:12px auto}.tiny{font-size:.78rem;color:var(--muted);margin:8px 0 0}.success{display:none;text-align:center;padding:22px 12px}.success.visible{display:block}.success strong{display:block;color:var(--mint);font-size:1.2rem;margin-bottom:6px}.secret-note{font-size:.78rem;color:var(--muted);margin-top:12px}.hidden{display:none!important}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand"><span class="mark">LT</span><span><strong>LEE TECHBOT</strong><small>Pair directly on this bot host</small></span></div>
+    <section class="card">
+      <div class="eyebrow">Host-native pairing</div>
+      <h1>Link WhatsApp directly to your bot.</h1>
+      <p>Choose a pairing code or QR. After WhatsApp approves the link, credentials are saved straight to this bot host's configured auth folder—no session bundle to copy.</p>
+      <section id="access">
+        <label for="token">Host pairing access key</label>
+        <input class="field" id="token" type="password" autocomplete="current-password" placeholder="Paste the key from your private bot-host logs" maxlength="256">
+        <button class="button" id="connect" style="width:100%;margin-top:10px">Unlock pairing</button>
+        <p class="secret-note">Keep this key private. It authorizes linking a WhatsApp account to this bot.</p>
+      </section>
+      <section id="app" class="hidden">
+        <div class="status" id="status" aria-live="polite">Checking the bot connection…</div>
+        <div class="methods" id="methods">
+          <div class="row"><button class="button" id="choose-code">Use a phone-number code</button><button class="button secondary" id="choose-qr">Use a QR scan</button></div>
+          <section class="method" id="code-method" hidden>
+            <label for="phone">WhatsApp number with country code</label>
+            <input class="field" id="phone" inputmode="numeric" autocomplete="tel" placeholder="254712345678" maxlength="15">
+            <button class="button" id="get-code" style="width:100%;margin-top:10px">Request pairing code</button>
+            <div class="code" id="code" hidden></div>
+            <button class="button secondary" id="copy-code" type="button" hidden style="width:100%">Copy code</button>
+            <p class="tiny">On WhatsApp: Settings → Linked devices → Link a device → Link with phone number instead. Codes are one-time; credentials will be stored by the bot after successful linking.</p>
+          </section>
+          <section class="method" id="qr-method" hidden>
+            <img class="qr" id="qr" alt="WhatsApp device-link QR code" hidden>
+            <p class="tiny" id="qr-help">Choose QR scan and wait for the bot's WhatsApp connection to become ready. A fresh QR will appear here and refresh as needed.</p>
+            <p class="tiny">On WhatsApp: Settings → Linked devices → Link a device, then scan this image.</p>
+          </section>
+        </div>
+        <section class="success" id="success"><strong>WhatsApp linked to this bot.</strong><span>Your bot is using the auth folder on this host. You can close this page; no session bundle is needed.</span></section>
+      </section>
+    </section>
+  </main>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  let key = sessionStorage.getItem('lee-host-pair-key') || '';
+  let timer = null;
+  let currentMode = '';
+  const message = (text, type='') => { const el=$('status'); el.textContent=text; el.className=`status ${type}`; };
+  const api = async (path, options={}) => {
+    const response = await fetch(path, {
+      ...options,
+      headers: { 'Accept':'application/json', 'Content-Type':'application/json', 'Authorization':`Bearer ${key}`, ...(options.headers||{}) },
+      cache:'no-store'
+    });
+    let data={}; try { data=await response.json(); } catch {}
+    if (!response.ok) throw new Error(data.error || `Request failed (${response.status}).`);
+    return data;
+  };
+  async function refresh() {
+    if (!key) return;
+    try {
+      const data=await api('/api/pairing/status');
+      $('access').classList.add('hidden'); $('app').classList.remove('hidden');
+      if (data.connected || data.registered) {
+        $('methods').classList.remove('visible'); $('success').classList.add('visible');
+        message('The bot reports a linked WhatsApp session.', 'good'); clearInterval(timer); return;
+      }
+      $('methods').classList.add('visible');
+      if (!currentMode && data.mode) currentMode=data.mode;
+      $('code-method').hidden=currentMode!=='code'; $('qr-method').hidden=currentMode!=='qr';
+      if (!data.ready) message('Bot is connecting to WhatsApp. Pairing choices will be ready shortly.');
+      else if (data.error) message(data.error, 'bad');
+      else message('Connection ready. Choose code or QR; successful linking is saved directly on this host.', 'good');
+      if (currentMode==='qr' && data.qr) { $('qr').src=data.qr; $('qr').hidden=false; $('qr-help').textContent='QR ready. Scan it before it refreshes.'; }
+      if (currentMode==='qr' && !data.qr) { $('qr').hidden=true; $('qr-help').textContent='Waiting for the host to provide a fresh QR…'; }
+      if (currentMode==='code' && data.code) { $('code').textContent=(data.code.match(/.{1,4}/g)||[data.code]).join('-'); $('code').hidden=false; $('copy-code').hidden=false; $('get-code').disabled=true; $('get-code').textContent='Code active — use it on WhatsApp'; }
+      else if (currentMode==='code' && $('code').hidden) { $('get-code').disabled=!data.ready; $('get-code').textContent='Request pairing code'; }
+      else if (currentMode==='code' && !$('code').hidden && !data.code) { $('code').hidden=true; $('copy-code').hidden=true; $('get-code').disabled=!data.ready; $('get-code').textContent='Request a new code'; message('The previous code expired. Request a fresh code.'); }
+    } catch(error) {
+      if (/access key|unauthorized/i.test(error.message)) {
+        clearInterval(timer); sessionStorage.removeItem('lee-host-pair-key'); key='';
+        $('access').classList.remove('hidden'); $('app').classList.add('hidden');
+        alert(error.message);
+      } else message(error.message, 'bad');
+    }
+  }
+  async function selectMode(mode) {
+    try {
+      await api('/api/pairing/mode',{method:'POST',body:JSON.stringify({mode})});
+      currentMode=mode;
+      $('code-method').hidden=mode!=='code'; $('qr-method').hidden=mode!=='qr';
+      if (mode==='code') { $('code').hidden=true; $('copy-code').hidden=true; $('phone').focus(); }
+      await refresh();
+    } catch(error) { message(error.message,'bad'); }
+  }
+  $('connect').onclick=async()=>{
+    key=$('token').value.trim(); if(!key){$('token').focus();return;}
+    try { await api('/api/pairing/status'); sessionStorage.setItem('lee-host-pair-key',key); $('access').classList.add('hidden'); $('app').classList.remove('hidden'); await refresh(); timer=setInterval(refresh,2000); }
+    catch(error){ key=''; message(error.message,'bad'); alert(error.message); }
+  };
+  $('choose-code').onclick=()=>selectMode('code');
+  $('choose-qr').onclick=()=>selectMode('qr');
+  $('copy-code').onclick=async()=>{try{await navigator.clipboard.writeText($('code').textContent);message('Pairing code copied. Enter it in WhatsApp now.','good');}catch{message('Select and copy the code manually.','bad');}};
+  $('get-code').onclick=async()=>{
+    const button=$('get-code'); button.disabled=true; button.textContent='Requesting…';
+    try { const result=await api('/api/pairing/code',{method:'POST',body:JSON.stringify({number:$('phone').value.trim()})}); $('code').textContent=(result.code.match(/.{1,4}/g)||[result.code]).join('-'); $('code').hidden=false; $('copy-code').hidden=false; message('WhatsApp confirmed the pairing-code request. Enter it on your phone now.','good'); }
+    catch(error){ message(error.message,'bad'); }
+    finally { button.disabled=false; button.textContent='Request pairing code'; }
+  };
+  $('token').addEventListener('keydown',e=>{if(e.key==='Enter')$('connect').click();});
+  if (key) { $('token').value=key; $('connect').click(); }
+})();
+</script>
+</body>
+</html>
