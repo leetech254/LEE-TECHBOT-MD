@@ -72,13 +72,13 @@ SESSION_BUNDLE=LEE-TECHBOT~your_complete_session_token
 
 ### Pair directly on the bot host (third website option)
 
-At startup choose **3** to start the bot-host pairing website. It binds to `0.0.0.0` on `PAIRING_WEB_PORT`, the platform's `PORT`, or port `8000`, starts with QR pairing, and keeps polling until WhatsApp links. The web page also offers phone-number code. Credentials are saved directly into `AUTH_DIR`, so no `SESSION_BUNDLE` copy is needed. No private key or access key is required.
+By default (`PAIRING_WEB_ENABLED=auto`), the bot serves `/pairing` on every normal boot, so its public domain answers even while a saved session is in use. With no registered session, it automatically starts QR pairing without startup-menu input; the page also offers phone-number code. It binds to `0.0.0.0` on `PAIRING_WEB_PORT`, then `SERVER_PORT` (Bot-Hosting.net), then `PORT`, then `8000`. Credentials save directly into `AUTH_DIR`, so no `SESSION_BUNDLE` copy is needed. If a previously saved session is rejected with 401, the bot clears that stale auth and opens a fresh QR flow in the same process—no manual process restart.
 
-For a public URL, expose this same Node service through the hosting panel's HTTP/domain feature. On Bot-Hosting.net, use the service's **Domains** tab to activate a server-provided HTTPS subdomain; then open `<assigned-public-url>/pairing`, or enter the public service URL in the pairing site's **On bot host** tab. The panel's deployment/dashboard URL is not the app URL. The process must be running and the public domain must map to the port where the bot is listening. `PAIRING_WEB_PUBLIC_URL` is optional and only makes the bot print the assigned URL in its logs.
+For a public URL, expose this same Node service through the hosting panel's HTTP/domain feature. On Bot-Hosting.net, use the service's **Domains** tab to activate the HTTPS subdomain; the app now binds to the provider's `SERVER_PORT`. Open `<assigned-public-url>/pairing`, or enter the public service URL in the pairing site's **On bot host** tab. The panel's dashboard URL is not the app URL. `PAIRING_WEB_PUBLIC_URL` is optional and only makes the bot print the assigned URL in its logs.
 
-Alternatively set `PAIRING_WEB_ENABLED=true` to start the page on every bot boot. The page is deliberately open during pairing so there is no key to enter: anyone who gets the link during that short window can control pairing. Keep the link private; pairing controls stop once linked, and an unlinked window closes after 30 minutes. Keep `AUTH_DIR` on persistent storage and run only one bot process against it.
+Set `PAIRING_WEB_ENABLED=true` to force the page on alongside explicit terminal settings, or `false` to opt out of web pairing and use terminal methods/menu. The page deliberately needs no access key: anyone who gets the link while pairing is open can control pairing, so keep it private. Pairing stops once linked; an unlinked window closes after 30 minutes, but the page's **Start a new pairing** button opens another window without restarting the process. Keep `AUTH_DIR` on persistent storage and run only one bot process against it.
 
-For hosts without an interactive console, set `PAIRING_WEB_ENABLED=true` and expose an HTTP domain/port. For hosts that cannot expose HTTP, use one of these environment configurations and restart the bot:
+For hosts without an interactive console, leave the default `auto` setting and expose the HTTP domain/port. If a host cannot expose HTTP, set `PAIRING_WEB_ENABLED=false` and use one of these environment configurations:
 
 ```env
 # Direct QR pairing; scan the QR displayed in the host console/logs
@@ -93,7 +93,7 @@ PHONE_NUMBER=254712345678
 AUTH_DIR=./auth
 ```
 
-Keep `AUTH_DIR` on persistent host storage and run only one bot process against it. If the host console does not accept interactive input, set `AUTH_METHOD=qr` for console QR or provide `PHONE_NUMBER` with `AUTH_METHOD=pair`; `SESSION_TERMINAL_PROMPT=true` enables the menu where the panel supports stdin.
+Keep `AUTH_DIR` on persistent host storage and run only one bot process against it. If you want the interactive menu instead of automatic website startup, set `SESSION_TERMINAL_PROMPT=true`; option **3** starts the host page. For console-only pairing, set `AUTH_METHOD=qr` or provide `PHONE_NUMBER` with `AUTH_METHOD=pair`.
 
 > Never share `SESSION_BUNDLE`, commit `.env`, or run multiple bot processes with the same auth directory.
 

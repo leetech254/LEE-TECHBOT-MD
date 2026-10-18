@@ -25,7 +25,7 @@ This release hardens the existing Baileys bot without removing its existing comm
 
 1. Copy `.env.example` to `.env`.
 2. Set `OWNER_NUMBER` to the bot owner’s international number, digits only. The developer/super-owner support number is fixed in `settings.js` as `254116553618`, does not use an environment variable, and is included automatically by `.owner`.
-3. For the direct bot-host website, choose option **3** at startup or set `PAIRING_WEB_ENABLED=true`, expose the bot's `PORT` through the host's HTTP/domain feature, and keep `AUTH_DIR` persistent. Open the assigned public service URL followed by `/pairing`, or use the standalone pairing site's **On bot host** tab. The page defaults to QR and also offers phone-number code; no private access key or `SESSION_BUNDLE` copy is needed. Keep the pairing link private while the 30-minute window is active.
+3. For direct bot-host pairing, default `PAIRING_WEB_ENABLED=auto` serves `/pairing` on normal boots, starts QR automatically when no session exists, and reopens after a saved-session 401. It binds to `SERVER_PORT` on Bot-Hosting.net (or `PORT` on other hosts); expose that port through the provider's HTTP/domain feature and keep `AUTH_DIR` persistent. Open the assigned public service URL followed by `/pairing`, or use the standalone pairing site's **On bot host** tab. No key or `SESSION_BUNDLE` copy is needed. Keep the link private; after 30 minutes, use the page's **Start a new pairing** button rather than restarting the bot.
 4. Add provider keys only for services you actually use.
 5. Keep the `session/` directory private and never commit it.
 6. Install and validate with:

@@ -5,6 +5,9 @@ const assert = require('node:assert/strict');
 const {
     resolveHostPairingMode,
     resolveHostMenuChoice,
+    resolvePairingWebStartupMode,
+    resolveHostPairingPort,
+    shouldAutoStartPairingWeb,
     renderTerminalQr
 } = require('../lib/hostPairing');
 
@@ -36,6 +39,29 @@ test('host login menu maps bundle, direct code, and deployed pairing website cho
     assert.equal(resolveHostMenuChoice('2'), 'pair');
     assert.equal(resolveHostMenuChoice('3'), 'web');
     assert.equal(resolveHostMenuChoice('4'), null);
+});
+
+test('pairing website starts automatically by default, with explicit always and manual modes', () => {
+    assert.equal(resolvePairingWebStartupMode(undefined), 'auto');
+    assert.equal(resolvePairingWebStartupMode('auto'), 'auto');
+    assert.equal(resolvePairingWebStartupMode('true'), 'always');
+    assert.equal(resolvePairingWebStartupMode('false'), 'manual');
+});
+
+test('Bot-Hosting SERVER_PORT is preferred unless an explicit pairing port is configured', () => {
+    assert.equal(resolveHostPairingPort({ SERVER_PORT: '5200', PORT: '3000' }), '5200');
+    assert.equal(resolveHostPairingPort({ PAIRING_WEB_PORT: '7070', SERVER_PORT: '5200' }), '7070');
+    assert.equal(resolveHostPairingPort({ PORT: '3000' }), '3000');
+    assert.equal(resolveHostPairingPort({}), '8000');
+});
+
+test('automatic web pairing is limited to a new session without explicit terminal choices', () => {
+    const defaults = { startupMode: 'auto', registered: false, hasSessionBundle: false, hasTerminalPairing: false, promptEnabled: false };
+    assert.equal(shouldAutoStartPairingWeb(defaults), true);
+    assert.equal(shouldAutoStartPairingWeb({ ...defaults, registered: true }), false);
+    assert.equal(shouldAutoStartPairingWeb({ ...defaults, hasSessionBundle: true }), false);
+    assert.equal(shouldAutoStartPairingWeb({ ...defaults, hasTerminalPairing: true }), false);
+    assert.equal(shouldAutoStartPairingWeb({ ...defaults, promptEnabled: true }), false);
 });
 
 test('terminal QR helper returns a rendered QR for the host console', async () => {

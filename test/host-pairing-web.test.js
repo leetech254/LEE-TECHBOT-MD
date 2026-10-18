@@ -16,9 +16,14 @@ async function withServer(t, overrides = {}) {
         error: ''
     };
     const requestedNumbers = [];
+    const retryRequests = [];
     const pairing = createHostPairingServer({
         getRuntime: () => runtime,
         onMode: async mode => { runtime = { ...runtime, mode }; },
+        onRetry: async () => {
+            retryRequests.push(true);
+            runtime = { ...runtime, mode: 'qr', connection: 'starting', ready: false, connected: false, registered: false, expired: false, qr: '', error: '' };
+        },
         requestPairingCode: async phone => {
             requestedNumbers.push(phone);
             return 'AB12CD34';
@@ -35,6 +40,7 @@ async function withServer(t, overrides = {}) {
     return {
         base,
         requestedNumbers,
+        retryRequests,
         setRuntime(next) { runtime = { ...runtime, ...next }; },
         getRuntime() { return runtime; }
     };
@@ -50,6 +56,7 @@ test('host pairing page and default QR status work without a key', async t => {
     assert.equal(page.status, 200);
     const html = await page.text();
     assert.match(html, /Pair directly on this bot host/);
+    assert.match(html, /Start a new pairing/);
     const response = await fetch(`${host.base}/api/pairing/status`);
     const state = await response.json();
     assert.equal(response.status, 200);
@@ -77,6 +84,12 @@ test('expired pairing window stays readable but cannot return a QR or accept con
         method: 'POST', headers: sameOrigin(host), body: JSON.stringify({ mode: 'qr' })
     });
     assert.equal(select.status, 410);
+    const retry = await fetch(`${host.base}/api/pairing/retry`, {
+        method: 'POST', headers: sameOrigin(host), body: '{}'
+    });
+    assert.equal(retry.status, 200);
+    assert.equal(host.getRuntime().expired, false);
+    assert.equal(host.retryRequests.length, 1);
 });
 
 test('host pairing status and QR image work from the host page origin', async t => {

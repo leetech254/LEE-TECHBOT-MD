@@ -49,7 +49,7 @@ const store = require('./lib/lightweight_store')
 const { ensureRuntimeDirs, readJson } = require('./lib/runtime')
 const { normalizeWhatsAppNumber } = require('./lib/phone')
 const { restoreSessionBundle } = require('./lib/sessionBundle')
-const { resolveHostPairingMode, resolveHostMenuChoice, renderTerminalQr } = require('./lib/hostPairing')
+const { resolveHostPairingMode, resolveHostMenuChoice, resolvePairingWebStartupMode, resolveHostPairingPort, shouldAutoStartPairingWeb, renderTerminalQr } = require('./lib/hostPairing')
 const { createHostPairingServer } = require('./lib/hostPairingWeb')
 const selfChatModule = require('./lib/selfChat')
 const { selfChatSendOptions, isSelfChat, createSelfChatSendQueue } = selfChatModule
@@ -213,7 +213,9 @@ global.themeemoji = "•"
 const authDir = process.env.AUTH_DIR || './session'
 
 let sessionBundle = process.env.SESSION_BUNDLE || process.env.SESSION_ID || ''
-let pairingWebEnabled = String(process.env.PAIRING_WEB_ENABLED || '').trim().toLowerCase() === 'true'
+const pairingWebStartupMode = resolvePairingWebStartupMode(process.env.PAIRING_WEB_ENABLED)
+const autoPairAfterLogout = pairingWebStartupMode !== 'manual'
+let pairingWebEnabled = pairingWebStartupMode === 'always'
 const hostPairingRuntime = { connection: 'starting', ready: false, connected: false, registered: false, expired: false, qr: '', error: '', mode: pairingWebEnabled ? 'qr' : null }
 let hostWebPairingMode = pairingWebEnabled ? 'qr' : null
 let hostWebPairingCodeInFlight = false
@@ -245,12 +247,36 @@ const question = (text) => {
     return Promise.reject(error)
 }
 
+function armPairingWebWindow() {
+    if (pairingWebWindowTimer) clearTimeout(pairingWebWindowTimer)
+    hostPairingRuntime.expired = false
+    pairingWebWindowTimer = setTimeout(() => {
+        pairingWebWindowTimer = null
+        if (hostPairingRuntime.connected || hostPairingRuntime.registered) return
+        hostPairingRuntime.expired = true
+        hostPairingRuntime.ready = false
+        hostPairingRuntime.qr = ''
+        hostPairingRuntime.error = 'Pairing window expired. Tap “Start a new pairing” here to continue without restarting the bot.'
+        pairingWebEnabled = false
+        hostWebPairingMode = null
+        const expiredSocket = activeSocket
+        activeSocket = null
+        try { expiredSocket?.ws?.close() } catch (_) {}
+        console.warn('[pairing-web] Pairing window expired; use the page to start a fresh window without restarting the bot.')
+    }, 30 * 60 * 1000)
+    if (typeof pairingWebWindowTimer.unref === 'function') pairingWebWindowTimer.unref()
+}
+
 function startHostPairingWebServer() {
-    if (!pairingWebEnabled || hostPairingWebServer) return Promise.resolve()
-    const rawPort = process.env.PAIRING_WEB_PORT || process.env.PORT || '8000'
+    if (!pairingWebEnabled) return Promise.resolve()
+    if (hostPairingWebServer) {
+        if (!hostPairingRuntime.connected && !hostPairingRuntime.registered) armPairingWebWindow()
+        return Promise.resolve()
+    }
+    const rawPort = resolveHostPairingPort(process.env)
     const port = Number(rawPort)
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
-        const error = new Error('PAIRING_WEB_PORT/PORT must be an integer from 1 to 65535.')
+        const error = new Error('PAIRING_WEB_PORT/SERVER_PORT/PORT must be an integer from 1 to 65535.')
         error.code = 'PAIRING_WEB_CONFIG_INVALID'
         return Promise.reject(error)
     }
@@ -267,6 +293,30 @@ function startHostPairingWebServer() {
                 startXeonBotInc().catch(error => {
                     hostPairingRuntime.error = 'The bot could not restart its WhatsApp connection. Check host logs.'
                     console.error('[pairing-web] Could not start bot socket:', error.message || error)
+                })
+            }
+        },
+        onRetry: async () => {
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer)
+                reconnectTimer = null
+            }
+            pairingWebEnabled = true
+            hostWebPairingMode = 'qr'
+            hostPairing401Retries = 0
+            hostPairingRuntime.mode = 'qr'
+            hostPairingRuntime.connection = 'starting'
+            hostPairingRuntime.ready = false
+            hostPairingRuntime.connected = false
+            hostPairingRuntime.registered = false
+            hostPairingRuntime.expired = false
+            hostPairingRuntime.qr = ''
+            hostPairingRuntime.error = ''
+            await startHostPairingWebServer()
+            if (!activeSocket && !socketStartInFlight && !global.__updateRestarting) {
+                startXeonBotInc().catch(error => {
+                    hostPairingRuntime.error = 'The bot could not start a fresh WhatsApp connection. Check the host logs.'
+                    console.error('[pairing-web] Could not start fresh bot socket:', error.message || error)
                 })
             }
         },
@@ -298,18 +348,7 @@ function startHostPairingWebServer() {
             const publicUrl = String(process.env.PAIRING_WEB_PUBLIC_URL || process.env.PUBLIC_URL || '').trim().replace(/\/+$/, '')
             if (publicUrl) console.log(`[pairing-web] Open ${publicUrl}/pairing`)
             else console.log(`[pairing-web] In your host Domains panel, expose this HTTP service and open its assigned public URL followed by /pairing.`)
-            pairingWebWindowTimer = setTimeout(() => {
-                if (hostPairingRuntime.connected || hostPairingRuntime.registered) return
-                hostPairingRuntime.expired = true
-                hostPairingRuntime.ready = false
-                hostPairingRuntime.qr = ''
-                hostPairingRuntime.error = 'Pairing window expired after 30 minutes. Restart the bot and choose option 3 to open a fresh link.'
-                pairingWebEnabled = false
-                hostWebPairingMode = null
-                try { activeSocket?.ws?.close() } catch (_) {}
-                console.warn('[pairing-web] Pairing window expired; restart the bot to open a fresh one.')
-            }, 30 * 60 * 1000)
-            if (typeof pairingWebWindowTimer.unref === 'function') pairingWebWindowTimer.unref()
+            if (!hostPairingRuntime.connected && !hostPairingRuntime.registered) armPairingWebWindow()
             resolve()
         })
     })
@@ -326,6 +365,23 @@ async function startXeonBotInc() {
         hostPairingRuntime.connected = false
         if (!pairingWebEnabled && !state.creds.registered && configuredHostPairingMode?.mode === 'invalid') {
             throw new Error('Invalid PHONE_NUMBER or PAIRING_NUMBER. Use 8–15 digits including the country code, for example 254712345678.')
+        }
+        if (pairingWebStartupMode === 'auto' && state.creds.registered && !terminalPairingNumber && !terminalQrMode && process.env.SESSION_TERMINAL_PROMPT !== 'true') {
+            pairingWebEnabled = true
+            hostWebPairingMode = 'qr'
+            hostPairingRuntime.mode = 'qr'
+        }
+        if (shouldAutoStartPairingWeb({
+            startupMode: pairingWebStartupMode,
+            registered: Boolean(state.creds.registered),
+            hasSessionBundle: Boolean(sessionBundle),
+            hasTerminalPairing: Boolean(terminalPairingNumber || terminalQrMode),
+            promptEnabled: process.env.SESSION_TERMINAL_PROMPT === 'true'
+        })) {
+            pairingWebEnabled = true
+            hostWebPairingMode = 'qr'
+            hostPairingRuntime.mode = 'qr'
+            console.log(chalk.green('[pairing-web] No saved session found; starting the QR-first pairing page automatically.'))
         }
         if (!state.creds.registered && !sessionBundle && !terminalPairingNumber && !terminalQrMode && !pairingWebEnabled) {
             const promptEnabled = process.env.SESSION_TERMINAL_PROMPT === 'true'
@@ -740,11 +796,44 @@ async function startXeonBotInc() {
             if ((statusCode === DisconnectReason.loggedOut || statusCode === 401) && !terminalPairingPending) {
                 try {
                     rmSync(authDir, { recursive: true, force: true })
-                    console.log(chalk.yellow(`Auth directory deleted: ${authDir}. Please re-authenticate.`))
+                    console.log(chalk.yellow(`Rejected WhatsApp auth cleared from ${authDir}.`))
                 } catch (error) {
                     console.error('Error deleting session:', error)
                 }
-                console.log(chalk.red('Session logged out. Restart and choose direct host pairing (code or QR), or use the pairing website to create a new SESSION_BUNDLE.'))
+                if (autoPairAfterLogout && !hostPairingRuntime.expired && !global.__updateRestarting) {
+                    pairingWebEnabled = true
+                    hostWebPairingMode = 'qr'
+                    terminalPairingNumber = ''
+                    terminalQrMode = false
+                    terminalPairingStopped = false
+                    hostWebPairingCodeInFlight = false
+                    hostPairing401Retries = 0
+                    hostPairingRuntime.mode = 'qr'
+                    hostPairingRuntime.connection = 'starting'
+                    hostPairingRuntime.ready = false
+                    hostPairingRuntime.connected = false
+                    hostPairingRuntime.registered = false
+                    hostPairingRuntime.qr = ''
+                    hostPairingRuntime.error = 'The saved WhatsApp session was rejected. Opening a fresh QR pairing flow automatically; no process restart is needed.'
+                    try {
+                        await startHostPairingWebServer()
+                    } catch (error) {
+                        hostPairingRuntime.error = 'The saved session was cleared, but the pairing page could not bind. Check SERVER_PORT/PORT and host logs.'
+                        console.error('[pairing-web] Could not start the automatic re-pair page:', error.message || error)
+                        return
+                    }
+                    console.log(chalk.yellow('[pairing-web] Saved session was rejected; starting a fresh QR pairing session without restarting the bot process.'))
+                    if (!reconnectTimer) {
+                        reconnectTimer = setTimeout(async () => {
+                            reconnectTimer = null
+                            if (global.__updateRestarting || activeSocket) return
+                            await startXeonBotInc()
+                        }, 1000)
+                    }
+                    return
+                }
+                hostPairingRuntime.error = 'The saved WhatsApp session was rejected. Choose a direct pairing method from the host menu or enable PAIRING_WEB_ENABLED=auto; no manual process restart is required if auto mode is enabled.'
+                console.log(chalk.red(hostPairingRuntime.error))
             }
 
             if (terminalPairingPending && !global.__updateRestarting) {
@@ -768,7 +857,7 @@ async function startXeonBotInc() {
                             }
                             return
                         }
-                        hostPairingRuntime.error = 'WhatsApp refused the connection with 401 after three attempts. The host page is running, but WhatsApp or the host network did not accept the socket. Check host outbound WebSocket access and your WhatsApp linked-device state; restart to retry.'
+                        hostPairingRuntime.error = 'WhatsApp refused the connection with 401 after three attempts. Check host outbound WebSocket access and your linked-device state, then tap Start a new pairing or choose a method below to retry without restarting the bot.'
                         console.error(chalk.red('WhatsApp returned 401 on three host-page attempts. The pairing website/port is not the cause; check host outbound WhatsApp WebSocket access and account linking state.'))
                         return
                     }

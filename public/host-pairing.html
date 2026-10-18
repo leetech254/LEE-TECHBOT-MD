@@ -21,6 +21,7 @@
       <p class="secret-note">Pairing controls stay open only during the temporary pairing window. Keep the deployed link private until your bot is linked; controls stop after linking and the window expires automatically.</p>
       <section id="app">
         <div class="status" id="status" aria-live="polite">Connecting to WhatsApp on this host…</div>
+        <section id="retry-panel" hidden><p class="tiny">The connection needs another attempt. Start a fresh QR session here; the bot process will not restart.</p><button class="button" id="retry-button" type="button">Start a new pairing</button></section>
         <div class="methods" id="methods">
           <div class="row"><button class="button" id="choose-code">Use a phone-number code</button><button class="button secondary" id="choose-qr">Use a QR scan</button></div>
           <section class="method" id="code-method" hidden>
@@ -62,14 +63,15 @@
     try {
       const data=await api('/api/pairing/status');
       if (data.connected || data.registered) {
-        $('methods').classList.remove('visible'); $('success').classList.add('visible');
-        message('The bot reports a linked WhatsApp session.', 'good'); clearInterval(timer); return;
+        $('methods').classList.remove('visible'); $('retry-panel').hidden=true; $('success').classList.add('visible');
+        message('The bot reports a linked WhatsApp session.', 'good'); clearInterval(timer); timer=null; return;
       }
       if (data.expired) {
-        windowExpired=true; $('methods').classList.remove('visible');
-        message(data.error || 'The pairing window expired. Restart the bot to open a new one.', 'bad');
-        clearInterval(timer); return;
+        windowExpired=true; $('methods').classList.remove('visible'); $('retry-panel').hidden=false;
+        message(data.error || 'The pairing window expired. Start a new pairing here without restarting the bot.', 'bad');
+        clearInterval(timer); timer=null; return;
       }
+      $('retry-panel').hidden=!(data.error && !data.ready);
       if (data.mode && data.mode!==currentMode) {
         currentMode=data.mode;
         $('code-method').hidden=currentMode!=='code'; $('qr-method').hidden=currentMode!=='qr';
@@ -104,6 +106,16 @@
     try { const result=await api('/api/pairing/code',{method:'POST',body:JSON.stringify({number:$('phone').value.trim()})}); $('code').textContent=(result.code.match(/.{1,4}/g)||[result.code]).join('-'); $('code').hidden=false; $('copy-code').hidden=false; message('WhatsApp confirmed the pairing-code request. Enter it on your phone now.','good'); }
     catch(error){ message(error.message,'bad'); }
     finally { if ($('code').hidden) { button.disabled=false; button.textContent='Request pairing code'; } }
+  };
+  $('retry-button').onclick=async()=>{
+    const button=$('retry-button'); button.disabled=true; button.textContent='Starting…';
+    try {
+      await api('/api/pairing/retry',{method:'POST',body:'{}'});
+      windowExpired=false; currentMode=''; $('retry-panel').hidden=true; $('success').classList.remove('visible'); $('methods').classList.add('visible');
+      if(!timer) timer=setInterval(refresh,2000);
+      await refresh();
+    } catch(error) { message(error.message,'bad'); }
+    finally { button.disabled=false; button.textContent='Start a new pairing'; }
   };
   refresh();
   if (!windowExpired) timer=setInterval(refresh,2000);
