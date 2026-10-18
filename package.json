@@ -15,7 +15,7 @@
     "reset-session": "node reset-session.js",
     "start:clean": "npm run cleanup && npm run start:optimized",
     "start:fresh": "npm run reset-session && npm start",
-    "test": "node --test test/*.test.js",
+    "test": "node --test --test-concurrency=1 test/*.test.js",
     "check": "node --check index.js && node --check main.js && node --check lib/hostPairing.js && node --check lib/hostPairingWeb.js && npm test",
     "audit:menu": "node scripts/audit-menu-commands.js",
     "install:panel": "npm ci --omit=dev --no-audit --no-fund --prefer-offline && (npm rebuild sharp --foreground-scripts || echo 'Warning: sharp native build unavailable; core bot remains available')",

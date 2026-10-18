@@ -17,15 +17,10 @@
     <section class="card">
       <div class="eyebrow">Host-native pairing</div>
       <h1>Link WhatsApp directly to your bot.</h1>
-      <p>Choose a pairing code or QR. After WhatsApp approves the link, credentials are saved straight to this bot host's configured auth folder—no session bundle to copy.</p>
-      <section id="access">
-        <label for="token">Host pairing access key</label>
-        <input class="field" id="token" type="password" autocomplete="current-password" placeholder="Paste the key from your private bot-host logs" maxlength="256">
-        <button class="button" id="connect" style="width:100%;margin-top:10px">Unlock pairing</button>
-        <p class="secret-note">Keep this key private. It authorizes linking a WhatsApp account to this bot.</p>
-      </section>
-      <section id="app" class="hidden">
-        <div class="status" id="status" aria-live="polite">Checking the bot connection…</div>
+      <p>This page waits for the bot's WhatsApp connection, shows a fresh QR by default, and saves credentials directly into this host's auth folder—no key or session bundle to copy.</p>
+      <p class="secret-note">Pairing controls stay open only during the temporary pairing window. Keep the deployed link private until your bot is linked; controls stop after linking and the window expires automatically.</p>
+      <section id="app">
+        <div class="status" id="status" aria-live="polite">Connecting to WhatsApp on this host…</div>
         <div class="methods" id="methods">
           <div class="row"><button class="button" id="choose-code">Use a phone-number code</button><button class="button secondary" id="choose-qr">Use a QR scan</button></div>
           <section class="method" id="code-method" hidden>
@@ -49,14 +44,14 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  let key = sessionStorage.getItem('lee-host-pair-key') || '';
   let timer = null;
   let currentMode = '';
+  let windowExpired = false;
   const message = (text, type='') => { const el=$('status'); el.textContent=text; el.className=`status ${type}`; };
   const api = async (path, options={}) => {
     const response = await fetch(path, {
       ...options,
-      headers: { 'Accept':'application/json', 'Content-Type':'application/json', 'Authorization':`Bearer ${key}`, ...(options.headers||{}) },
+      headers: { 'Accept':'application/json', 'Content-Type':'application/json', ...(options.headers||{}) },
       cache:'no-store'
     });
     let data={}; try { data=await response.json(); } catch {}
@@ -64,31 +59,32 @@
     return data;
   };
   async function refresh() {
-    if (!key) return;
     try {
       const data=await api('/api/pairing/status');
-      $('access').classList.add('hidden'); $('app').classList.remove('hidden');
       if (data.connected || data.registered) {
         $('methods').classList.remove('visible'); $('success').classList.add('visible');
         message('The bot reports a linked WhatsApp session.', 'good'); clearInterval(timer); return;
       }
+      if (data.expired) {
+        windowExpired=true; $('methods').classList.remove('visible');
+        message(data.error || 'The pairing window expired. Restart the bot to open a new one.', 'bad');
+        clearInterval(timer); return;
+      }
+      if (data.mode && data.mode!==currentMode) {
+        currentMode=data.mode;
+        $('code-method').hidden=currentMode!=='code'; $('qr-method').hidden=currentMode!=='qr';
+      }
       $('methods').classList.add('visible');
-      if (!currentMode && data.mode) currentMode=data.mode;
-      $('code-method').hidden=currentMode!=='code'; $('qr-method').hidden=currentMode!=='qr';
-      if (!data.ready) message('Bot is connecting to WhatsApp. Pairing choices will be ready shortly.');
-      else if (data.error) message(data.error, 'bad');
-      else message('Connection ready. Choose code or QR; successful linking is saved directly on this host.', 'good');
-      if (currentMode==='qr' && data.qr) { $('qr').src=data.qr; $('qr').hidden=false; $('qr-help').textContent='QR ready. Scan it before it refreshes.'; }
+      if (data.error) message(data.error, 'bad');
+      else if (!data.ready) message('Waiting for the bot-host WhatsApp connection. This page will keep checking automatically.');
+      else message('Connection ready. Scan the QR, or switch to phone-number code. The bot will show success when linked.', 'good');
+      if (currentMode==='qr' && data.qr) { $('qr').src=data.qr; $('qr').hidden=false; $('qr-help').textContent='QR ready. It refreshes automatically when WhatsApp rotates it.'; }
       if (currentMode==='qr' && !data.qr) { $('qr').hidden=true; $('qr-help').textContent='Waiting for the host to provide a fresh QR…'; }
       if (currentMode==='code' && data.code) { $('code').textContent=(data.code.match(/.{1,4}/g)||[data.code]).join('-'); $('code').hidden=false; $('copy-code').hidden=false; $('get-code').disabled=true; $('get-code').textContent='Code active — use it on WhatsApp'; }
-      else if (currentMode==='code' && $('code').hidden) { $('get-code').disabled=!data.ready; $('get-code').textContent='Request pairing code'; }
-      else if (currentMode==='code' && !$('code').hidden && !data.code) { $('code').hidden=true; $('copy-code').hidden=true; $('get-code').disabled=!data.ready; $('get-code').textContent='Request a new code'; message('The previous code expired. Request a fresh code.'); }
+      else if (currentMode==='code' && !$('code').hidden) { $('code').hidden=true; $('copy-code').hidden=true; $('get-code').disabled=!data.ready; $('get-code').textContent='Request a new code'; message('The previous code expired. Request a fresh one.'); }
+      else if (currentMode==='code') { $('get-code').disabled=!data.ready; $('get-code').textContent='Request pairing code'; }
     } catch(error) {
-      if (/access key|unauthorized/i.test(error.message)) {
-        clearInterval(timer); sessionStorage.removeItem('lee-host-pair-key'); key='';
-        $('access').classList.remove('hidden'); $('app').classList.add('hidden');
-        alert(error.message);
-      } else message(error.message, 'bad');
+      message(`${error.message} Retrying automatically…`, 'bad');
     }
   }
   async function selectMode(mode) {
@@ -96,15 +92,10 @@
       await api('/api/pairing/mode',{method:'POST',body:JSON.stringify({mode})});
       currentMode=mode;
       $('code-method').hidden=mode!=='code'; $('qr-method').hidden=mode!=='qr';
-      if (mode==='code') { $('code').hidden=true; $('copy-code').hidden=true; $('phone').focus(); }
+      if (mode==='code') { $('code').hidden=true; $('copy-code').hidden=true; $('get-code').disabled=false; $('phone').focus(); }
       await refresh();
     } catch(error) { message(error.message,'bad'); }
   }
-  $('connect').onclick=async()=>{
-    key=$('token').value.trim(); if(!key){$('token').focus();return;}
-    try { await api('/api/pairing/status'); sessionStorage.setItem('lee-host-pair-key',key); $('access').classList.add('hidden'); $('app').classList.remove('hidden'); await refresh(); timer=setInterval(refresh,2000); }
-    catch(error){ key=''; message(error.message,'bad'); alert(error.message); }
-  };
   $('choose-code').onclick=()=>selectMode('code');
   $('choose-qr').onclick=()=>selectMode('qr');
   $('copy-code').onclick=async()=>{try{await navigator.clipboard.writeText($('code').textContent);message('Pairing code copied. Enter it in WhatsApp now.','good');}catch{message('Select and copy the code manually.','bad');}};
@@ -112,10 +103,10 @@
     const button=$('get-code'); button.disabled=true; button.textContent='Requesting…';
     try { const result=await api('/api/pairing/code',{method:'POST',body:JSON.stringify({number:$('phone').value.trim()})}); $('code').textContent=(result.code.match(/.{1,4}/g)||[result.code]).join('-'); $('code').hidden=false; $('copy-code').hidden=false; message('WhatsApp confirmed the pairing-code request. Enter it on your phone now.','good'); }
     catch(error){ message(error.message,'bad'); }
-    finally { button.disabled=false; button.textContent='Request pairing code'; }
+    finally { if ($('code').hidden) { button.disabled=false; button.textContent='Request pairing code'; } }
   };
-  $('token').addEventListener('keydown',e=>{if(e.key==='Enter')$('connect').click();});
-  if (key) { $('token').value=key; $('connect').click(); }
+  refresh();
+  if (!windowExpired) timer=setInterval(refresh,2000);
 })();
 </script>
 </body>

@@ -72,21 +72,13 @@ SESSION_BUNDLE=LEE-TECHBOT~your_complete_session_token
 
 ### Pair directly on the bot host (third website option)
 
-The standalone pairing website now has an **On bot host** tab. This opens a second, protected pairing page served by the bot process itself. Select QR or pairing code there; once WhatsApp accepts the link, Baileys saves credentials directly into `AUTH_DIR`, so the bot starts with the linked session and no `SESSION_BUNDLE` copy is needed.
+At startup choose **3** to start the bot-host pairing website. It binds to `0.0.0.0` on `PAIRING_WEB_PORT`, the platform's `PORT`, or port `8000`, starts with QR pairing, and keeps polling until WhatsApp links. The web page also offers phone-number code. Credentials are saved directly into `AUTH_DIR`, so no `SESSION_BUNDLE` copy is needed. No private key or access key is required.
 
-Enable the direct page in the bot host environment and keep its auth directory on persistent storage:
+For a public URL, expose this same Node service through the hosting panel's HTTP/domain feature. On Bot-Hosting.net, use the service's **Domains** tab to activate a server-provided HTTPS subdomain; then open `<assigned-public-url>/pairing`, or enter the public service URL in the pairing site's **On bot host** tab. The panel's deployment/dashboard URL is not the app URL. The process must be running and the public domain must map to the port where the bot is listening. `PAIRING_WEB_PUBLIC_URL` is optional and only makes the bot print the assigned URL in its logs.
 
-```env
-PAIRING_WEB_ENABLED=true
-PAIRING_WEB_HOST=0.0.0.0
-PAIRING_WEB_PORT=
-PAIRING_WEB_TOKEN=
-AUTH_DIR=./auth
-```
+Alternatively set `PAIRING_WEB_ENABLED=true` to start the page on every bot boot. The page is deliberately open during pairing so there is no key to enter: anyone who gets the link during that short window can control pairing. Keep the link private; pairing controls stop once linked, and an unlinked window closes after 30 minutes. Keep `AUTH_DIR` on persistent storage and run only one bot process against it.
 
-The service uses the platform's `PORT` when `PAIRING_WEB_PORT` is empty. Deploy/restart the bot, copy its public service URL from the hosting panel, then open the pairing website's **On bot host** tab and enter that URL. Visit `<your-bot-service-url>/pairing` directly if you prefer. The host prints a randomly generated private access key in its logs on each start when `PAIRING_WEB_TOKEN` is blank; alternatively set a private token of at least 24 characters in the host environment. Enter that key on the host-served page, then select QR or code. Do not publish the key.
-
-For hosts without an interactive console, the page is the recommended path. The legacy startup menu is also available when the host website is disabled: choose **2** for direct code, **3** for direct QR, or **1** to paste a bundle. For hosts that cannot expose HTTP, set one of these environment configurations and restart the bot:
+For hosts without an interactive console, set `PAIRING_WEB_ENABLED=true` and expose an HTTP domain/port. For hosts that cannot expose HTTP, use one of these environment configurations and restart the bot:
 
 ```env
 # Direct QR pairing; scan the QR displayed in the host console/logs
@@ -101,7 +93,7 @@ PHONE_NUMBER=254712345678
 AUTH_DIR=./auth
 ```
 
-Keep `AUTH_DIR` on persistent host storage and run only one bot process against it. If the host console does not accept interactive input, set `AUTH_METHOD=qr` or provide `PHONE_NUMBER` with `AUTH_METHOD=pair`; `SESSION_TERMINAL_PROMPT=true` enables the menu where the panel supports stdin.
+Keep `AUTH_DIR` on persistent host storage and run only one bot process against it. If the host console does not accept interactive input, set `AUTH_METHOD=qr` for console QR or provide `PHONE_NUMBER` with `AUTH_METHOD=pair`; `SESSION_TERMINAL_PROMPT=true` enables the menu where the panel supports stdin.
 
 > Never share `SESSION_BUNDLE`, commit `.env`, or run multiple bot processes with the same auth directory.
 

@@ -6,7 +6,7 @@ This release hardens the existing Baileys bot without removing its existing comm
 
 - **Secrets removed from source:** owner number, Giphy key, and provider keys are now read from `.env` or the host’s secret manager.
 - **Owner authorization fixed:** an unset `OWNER_NUMBER` can no longer authorize every sender because an empty string matched every JID.
-- **Startup made safe:** saved sessions reconnect silently; new sessions can use the protected bot-host `/pairing` website for direct QR/code linking, or the terminal code/QR/bundle menu when the host website is disabled.
+- **Startup made safe:** saved sessions reconnect silently; new sessions can use the QR-first bot-host `/pairing` website or the direct code/QR/bundle options.
 - **Message resilience added:** duplicate WhatsApp deliveries are ignored, command bursts are rate-limited, and lightweight health metrics are maintained in memory.
 - **State writes made safer:** new runtime helpers support atomic JSON replacement and safe fallback reads, preventing partially-written state files.
 - **Deployment scripts corrected:** the Docker image command is valid, the project has a reproducible `package-lock.json`, and `npm run check` performs syntax and test validation.
@@ -25,7 +25,7 @@ This release hardens the existing Baileys bot without removing its existing comm
 
 1. Copy `.env.example` to `.env`.
 2. Set `OWNER_NUMBER` to the bot owner’s international number, digits only. The developer/super-owner support number is fixed in `settings.js` as `254116553618`, does not use an environment variable, and is included automatically by `.owner`.
-3. For the direct bot-host website, set `PAIRING_WEB_ENABLED=true`, expose the bot's `PORT`, and keep `AUTH_DIR` persistent. Open the standalone pairing site's **On bot host** tab with the bot service URL (or visit its `/pairing` path), enter the private access key from host logs, then choose QR or code. Both link directly to the bot's own `AUTH_DIR`; no `SESSION_BUNDLE` copy is needed.
+3. For the direct bot-host website, choose option **3** at startup or set `PAIRING_WEB_ENABLED=true`, expose the bot's `PORT` through the host's HTTP/domain feature, and keep `AUTH_DIR` persistent. Open the assigned public service URL followed by `/pairing`, or use the standalone pairing site's **On bot host** tab. The page defaults to QR and also offers phone-number code; no private access key or `SESSION_BUNDLE` copy is needed. Keep the pairing link private while the 30-minute window is active.
 4. Add provider keys only for services you actually use.
 5. Keep the `session/` directory private and never commit it.
 6. Install and validate with:
@@ -85,7 +85,7 @@ If WhatsApp displays “Waiting for this message” and the console reports `Bad
 
 The same recovery applies when libsignal reports `SessionError: Over 2000 messages into the future`. The bot logs the issue, closes the affected socket, and reconnects while preserving `AUTH_DIR`; the supervisor also restarts the process without renaming or deleting credentials. This prevents a transient decryption error from silently removing the linked device. Only an explicit WhatsApp logout (`401`/`loggedOut`) clears credentials and requires pairing again. If a Signal session is genuinely unrecoverable, stop the bot and reset `AUTH_DIR` manually after confirming that a new pairing is acceptable.
 
-To use direct QR pairing on the bot host, set `AUTH_METHOD=qr`; the QR is rendered in the host console and credentials are saved to `AUTH_DIR`. For interactive hosts, choose option 3 at startup. A saved session reconnects without showing the pairing menu.
+To use terminal-only direct QR pairing on a host that cannot expose HTTP, set `AUTH_METHOD=qr`; the QR is rendered in the host console and credentials are saved to `AUTH_DIR`. For interactive hosts that can expose the web port, choose option 3 at startup to open the deployed pairing page. A saved session reconnects without showing the pairing menu.
 
 ## AI chatbot
 

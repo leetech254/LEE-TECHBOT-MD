@@ -31,10 +31,10 @@ test('invalid configured phone number is rejected', () => {
     assert.deepEqual(resolveHostPairingMode({ AUTH_METHOD: 'pair', PHONE_NUMBER: '123' }), { mode: 'invalid' });
 });
 
-test('host login menu maps bundle, direct code, and direct QR choices', () => {
+test('host login menu maps bundle, direct code, and deployed pairing website choices', () => {
     assert.equal(resolveHostMenuChoice('1'), 'bundle');
     assert.equal(resolveHostMenuChoice('2'), 'pair');
-    assert.equal(resolveHostMenuChoice('3'), 'qr');
+    assert.equal(resolveHostMenuChoice('3'), 'web');
     assert.equal(resolveHostMenuChoice('4'), null);
 });
 
