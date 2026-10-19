@@ -21,6 +21,12 @@
       <p class="secret-note">Pairing controls stay open only during the temporary pairing window. Keep the deployed link private until your bot is linked; controls stop after linking and the window expires automatically.</p>
       <section id="app">
         <div class="status" id="status" aria-live="polite">Connecting to WhatsApp on this host…</div>
+        <div id="status-summary" role="group" aria-label="Live connection details" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:8px;margin:10px 0 14px">
+          <div style="padding:9px 11px;border:1px solid #284565;border-radius:11px;background:#09182a"><span class="tiny">Host page</span><strong id="host-state" style="display:block;color:#b5f6e7">Online</strong></div>
+          <div style="padding:9px 11px;border:1px solid #284565;border-radius:11px;background:#09182a"><span class="tiny">WhatsApp</span><strong id="whatsapp-state" style="display:block">Starting</strong></div>
+          <div style="padding:9px 11px;border:1px solid #284565;border-radius:11px;background:#09182a"><span class="tiny">Pairing</span><strong id="pairing-state" style="display:block">Waiting</strong></div>
+          <div style="padding:9px 11px;border:1px solid #284565;border-radius:11px;background:#09182a"><span class="tiny">Last check</span><strong id="updated-state" style="display:block">—</strong></div>
+        </div>
         <section id="retry-panel" hidden><p class="tiny">The connection needs another attempt. Start a fresh QR session here; the bot process will not restart.</p><button class="button" id="retry-button" type="button">Start a new pairing</button></section>
         <div class="methods" id="methods">
           <div class="row"><button class="button" id="choose-code">Use a phone-number code</button><button class="button secondary" id="choose-qr">Use a QR scan</button></div>
@@ -49,6 +55,12 @@
   let currentMode = '';
   let windowExpired = false;
   const message = (text, type='') => { const el=$('status'); el.textContent=text; el.className=`status ${type}`; };
+  function updateSummary(data) {
+    $('host-state').textContent='Online';
+    $('whatsapp-state').textContent=data.connected ? 'Connected' : data.registered ? 'Session saved' : data.connection==='close' ? 'Reconnecting' : data.connection==='open' ? 'Connected' : data.ready ? 'Ready' : 'Connecting';
+    $('pairing-state').textContent=data.connected ? 'Complete' : data.expired ? 'Expired' : data.ready ? `${data.mode==='code'?'Code':'QR'} ready` : 'Waiting';
+    $('updated-state').textContent=new Date().toLocaleTimeString();
+  }
   const api = async (path, options={}) => {
     const response = await fetch(path, {
       ...options,
@@ -62,10 +74,17 @@
   async function refresh() {
     try {
       const data=await api('/api/pairing/status');
-      if (data.connected || data.registered) {
+      updateSummary(data);
+      if (data.connected) {
         $('methods').classList.remove('visible'); $('retry-panel').hidden=true; $('success').classList.add('visible');
-        message('The bot reports a linked WhatsApp session.', 'good'); clearInterval(timer); timer=null; return;
+        message('WhatsApp is connected to this bot.', 'good'); clearInterval(timer); timer=null; return;
       }
+      if (data.registered) {
+        $('methods').classList.remove('visible'); $('retry-panel').hidden=true; $('success').classList.remove('visible');
+        message(data.error || 'Saved WhatsApp credentials found. Waiting for the bot to finish reconnecting; this page will keep checking.', data.error ? 'bad' : 'good');
+        return;
+      }
+      $('success').classList.remove('visible');
       if (data.expired) {
         windowExpired=true; $('methods').classList.remove('visible'); $('retry-panel').hidden=false;
         message(data.error || 'The pairing window expired. Start a new pairing here without restarting the bot.', 'bad');
@@ -86,6 +105,7 @@
       else if (currentMode==='code' && !$('code').hidden) { $('code').hidden=true; $('copy-code').hidden=true; $('get-code').disabled=!data.ready; $('get-code').textContent='Request a new code'; message('The previous code expired. Request a fresh one.'); }
       else if (currentMode==='code') { $('get-code').disabled=!data.ready; $('get-code').textContent='Request pairing code'; }
     } catch(error) {
+      $('host-state').textContent='API unavailable'; $('whatsapp-state').textContent='Unknown'; $('pairing-state').textContent='Check failed'; $('updated-state').textContent=new Date().toLocaleTimeString();
       message(`${error.message} Retrying automatically…`, 'bad');
     }
   }

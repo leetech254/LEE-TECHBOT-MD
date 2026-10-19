@@ -57,6 +57,10 @@ test('host pairing page and default QR status work without a key', async t => {
     const html = await page.text();
     assert.match(html, /Pair directly on this bot host/);
     assert.match(html, /Start a new pairing/);
+    assert.match(html, /Live connection details/);
+    assert.match(html, /id="whatsapp-state"/);
+    assert.match(html, /id="pairing-state"/);
+    assert.match(html, /Waiting for the bot to finish reconnecting/);
     const response = await fetch(`${host.base}/api/pairing/status`);
     const state = await response.json();
     assert.equal(response.status, 200);
@@ -71,6 +75,35 @@ test('pairing controls reject cross-origin browser POSTs without a key', async t
         body: JSON.stringify({ mode: 'code' })
     });
     assert.equal(response.status, 403);
+});
+
+test('public cross-origin summary reports status but never exposes QR, code, or phone data', async t => {
+    const host = await withServer(t);
+    host.setRuntime({ ready: true, connected: false, registered: false, connection: 'connecting', qr: 'secret-qr-value', code: 'SECRET-CODE', phone: '254712345678' });
+    const response = await fetch(`${host.base}/api/pairing/summary`, {
+        headers: { Origin: 'https://proper-badger-techlee-pair.koyeb.app', 'Sec-Fetch-Site': 'cross-site' }
+    });
+    const summary = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('access-control-allow-origin'), '*');
+    assert.equal(summary.connection, 'connecting');
+    assert.equal(summary.ready, true);
+    assert.equal(Object.hasOwn(summary, 'qr'), false);
+    assert.equal(Object.hasOwn(summary, 'code'), false);
+    assert.equal(Object.hasOwn(summary, 'phone'), false);
+    assert.equal(JSON.stringify(summary).includes('secret-qr-value'), false);
+    assert.equal(JSON.stringify(summary).includes('SECRET-CODE'), false);
+});
+
+test('read-only status endpoint answers browser CORS preflight', async t => {
+    const host = await withServer(t);
+    const response = await fetch(`${host.base}/api/pairing/summary`, {
+        method: 'OPTIONS',
+        headers: { Origin: 'https://pair.example', 'Access-Control-Request-Method': 'GET', 'Sec-Fetch-Site': 'cross-site' }
+    });
+    assert.equal(response.status, 204);
+    assert.equal(response.headers.get('access-control-allow-origin'), '*');
+    assert.match(response.headers.get('access-control-allow-methods') || '', /GET/);
 });
 
 test('expired pairing window stays readable but cannot return a QR or accept controls', async t => {

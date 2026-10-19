@@ -2,6 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const {
     resolveHostPairingMode,
     resolveHostMenuChoice,
@@ -53,6 +55,13 @@ test('Bot-Hosting SERVER_PORT is preferred unless an explicit pairing port is co
     assert.equal(resolveHostPairingPort({ PAIRING_WEB_PORT: '7070', SERVER_PORT: '5200' }), '7070');
     assert.equal(resolveHostPairingPort({ PORT: '3000' }), '3000');
     assert.equal(resolveHostPairingPort({}), '8000');
+});
+
+test('bot supports current PaaS Node runtime and declares a public web process', () => {
+    const packageJson = require('../package.json');
+    const procfile = fs.readFileSync(path.join(__dirname, '..', 'Procfile'), 'utf8').trim();
+    assert.equal(packageJson.engines.node, '>=20.0.0');
+    assert.equal(procfile, 'web: npm start');
 });
 
 test('automatic web pairing is limited to a new session without explicit terminal choices', () => {

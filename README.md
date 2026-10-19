@@ -42,8 +42,21 @@
 </div>
 
 > **Recommended start command:** `npm start`
-> **Node.js:** 18 or newer, with Node.js 20+ recommended.
-> **Important:** Free hosts may sleep, restart, or delete storage. Keep the bot’s auth/session directory persistent.
+> **Node.js:** 20 or newer.
+> **Important:** Free hosts may sleep, restart, or delete storage. Keep the bot’s auth/session directory persistent and run one instance only.
+
+### Cross-host deployment
+
+The bot's direct-pairing web listener binds to `0.0.0.0` and uses `PAIRING_WEB_PORT`, then `SERVER_PORT` (panel hosts such as Bot-Hosting), then `PORT` (Heroku, Render, Railway, Koyeb and many other Node PaaS providers), then `8000` for local use. Use a **web service/process** when you want a public pairing page; a worker-only process has no public HTTP route.
+
+| Host type | Start configuration | Port / storage notes |
+|---|---|---|
+| Heroku | The included `Procfile` runs `web: npm start`. | Heroku injects `PORT`. Its filesystem is ephemeral, so `AUTH_DIR` will not survive dyno replacement; use durable external session storage before relying on Heroku for a long-lived linked bot. |
+| Render / Railway / Koyeb | Set the Node web-service start command to `npm start`. | Uses `PORT`; attach persistent storage for `AUTH_DIR` if the provider offers it. |
+| Bot-Hosting / panel hosts | Use `npm start` or the panel's Node startup command. | Uses `SERVER_PORT` first; expose that port through the panel's domain/proxy setting. |
+| Docker / VPS | Run `npm start` and publish the service port. | Uses `PORT` or local fallback `8000`; persist `AUTH_DIR` as a volume/disk. |
+
+For every host, use one running bot process per `AUTH_DIR`, allow outbound HTTPS/WebSocket connections to WhatsApp, and keep the service awake while pairing. This app uses a live Baileys WebSocket, so serverless functions that pause or end between requests are not supported. The direct-pair page and `/health` route share the bot's single Node process and provider-assigned port.
 
 ---
 
@@ -72,11 +85,11 @@ SESSION_BUNDLE=LEE-TECHBOT~your_complete_session_token
 
 ### Pair directly on the bot host (third website option)
 
-By default (`PAIRING_WEB_ENABLED=auto`), the bot serves `/pairing` on every normal boot, so its public domain answers even while a saved session is in use. With no registered session, it automatically starts QR pairing without startup-menu input; the page also offers phone-number code. It binds to `0.0.0.0` on `PAIRING_WEB_PORT`, then `SERVER_PORT` (Bot-Hosting.net), then `PORT`, then `8000`. Credentials save directly into `AUTH_DIR`, so no `SESSION_BUNDLE` copy is needed. If a previously saved session is rejected with 401, the bot clears that stale auth and opens a fresh QR flow in the same process—no manual process restart.
+By default (`PAIRING_WEB_ENABLED=auto`), the bot serves `/pairing` on every normal boot, so its public domain answers even while a saved session is in use. With no registered session, it automatically starts QR pairing without startup-menu input; the page also offers phone-number code. It binds to `0.0.0.0` on `PAIRING_WEB_PORT`, then `SERVER_PORT`, then `PORT`, then `8000`. Credentials save directly into `AUTH_DIR`, so no `SESSION_BUNDLE` copy is needed. If a previously saved session is rejected with 401, the bot clears that stale auth and opens a fresh QR flow in the same process—no manual process restart. The page displays live host/API, WhatsApp connection, pairing-method, and last-check status; QR changes are polled automatically.
 
-For a public URL, expose this same Node service through the hosting panel's HTTP/domain feature. On Bot-Hosting.net, use the service's **Domains** tab to activate the HTTPS subdomain; the app now binds to the provider's `SERVER_PORT`. Open `<assigned-public-url>/pairing`, or enter the public service URL in the pairing site's **On bot host** tab. The panel's dashboard URL is not the app URL. `PAIRING_WEB_PUBLIC_URL` is optional and only makes the bot print the assigned URL in its logs.
+For a public URL, expose this same Node service through the hosting panel's HTTP/domain feature. On Bot-Hosting.net, use the service's **Domains** tab to activate the HTTPS subdomain; the app binds to `SERVER_PORT`. On Heroku and other common PaaS services, the app reads the assigned `PORT`; the included `Procfile` declares a public `web` process. Open `<assigned-public-url>/pairing`, or enter the public service URL in the pairing site's **On bot host** tab and use **Check bot-host status**. The panel's dashboard URL is not the app URL. `PAIRING_WEB_PUBLIC_URL` is optional and only makes the bot print the assigned URL in its logs.
 
-Set `PAIRING_WEB_ENABLED=true` to force the page on alongside explicit terminal settings, or `false` to opt out of web pairing and use terminal methods/menu. The page deliberately needs no access key: anyone who gets the link while pairing is open can control pairing, so keep it private. Pairing stops once linked; an unlinked window closes after 30 minutes, but the page's **Start a new pairing** button opens another window without restarting the process. Keep `AUTH_DIR` on persistent storage and run only one bot process against it.
+Set `PAIRING_WEB_ENABLED=true` to force the page on alongside explicit terminal settings, or `false` to opt out of web pairing and use terminal methods/menu. The page deliberately needs no manual access key: anyone who gets the link while pairing is open can control pairing, so keep it private. Pairing stops once linked; an unlinked window closes after 30 minutes, but the page's **Start a new pairing** button opens another window without restarting the process. Keep `AUTH_DIR` on persistent storage and run only one bot process against it. **Heroku-specific:** the process and port binding work through the included `Procfile`, but Heroku dyno disk is ephemeral; without a durable external auth store, WhatsApp login credentials can be lost when the dyno is replaced. Do not treat a passing `/health` check as proof that the auth directory is persistent.
 
 For hosts without an interactive console, leave the default `auto` setting and expose the HTTP domain/port. If a host cannot expose HTTP, set `PAIRING_WEB_ENABLED=false` and use one of these environment configurations:
 
