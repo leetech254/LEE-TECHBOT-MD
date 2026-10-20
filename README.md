@@ -117,6 +117,10 @@ AUTH_DIR=./auth
 
 Keep `AUTH_DIR` on persistent host storage and run only one bot process against it. If you want the interactive menu instead of automatic website startup, set `SESSION_TERMINAL_PROMPT=true`; option **3** starts the host page. For console-only pairing, set `AUTH_METHOD=qr` or provide `PHONE_NUMBER` with `AUTH_METHOD=pair`.
 
+### Troubleshooting updates and occupied ports
+
+If startup reports `EADDRINUSE` for `SERVER_PORT`/`PORT`, another process still owns the pairing web listener. Stop the app completely in the hosting panel, confirm the old console process has exited, and start exactly one instance. Check that the panel startup command, PM2, or a custom `RESTART_COMMAND` is not launching a second copy. Keep the existing `AUTH_DIR`; do not delete or regenerate the WhatsApp session to fix a port collision. Repeated WhatsApp 503/428 disconnects can be transient, but if they continue, first rule out multiple bot processes using the same `AUTH_DIR` and ensure the host permits outbound WebSocket connections.
+
 > Never share `SESSION_BUNDLE`, commit `.env`, or run multiple bot processes with the same auth directory.
 
 ---

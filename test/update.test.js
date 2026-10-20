@@ -61,6 +61,12 @@ test('runtime settings are treated as preserved paths', () => {
     assert.equal(updater.isPreservedPath('commands/update.js'), false);
 });
 
+test('Git porcelain parsing preserves leading status spaces and complete runtime paths', () => {
+    const paths = updater.parseGitStatusPaths(' M data/userGroupData.json\n?? data/newRuntime.json\n M commands/example.js\n');
+    assert.deepEqual(paths, ['data/userGroupData.json', 'data/newRuntime.json', 'commands/example.js']);
+    assert.deepEqual(paths.filter(item => !updater.isPreservedPath(item)), ['commands/example.js']);
+});
+
 test('preservation snapshot can be created and restored safely', () => {
     const snapshot = updater.snapshotPreservedFiles();
     assert.ok(snapshot.snapshotRoot);

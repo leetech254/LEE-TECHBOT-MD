@@ -46,6 +46,13 @@ function isPreservedPath(filePath) {
     return PRESERVED_PATHS.some(prefix => prefix.endsWith('/') ? normalized.startsWith(prefix) : normalized === prefix);
 }
 
+function parseGitStatusPaths(porcelain) {
+    return String(porcelain || '').split(/\r?\n/)
+        .filter(line => line.trim().length >= 4)
+        .map(line => line.slice(3).trim())
+        .filter(Boolean);
+}
+
 function snapshotPreservedFiles() {
     const snapshotRoot = fs.mkdtempSync(path.join(require('os').tmpdir(), 'lee-update-preserve-'));
     const copied = [];
@@ -153,11 +160,13 @@ async function hasGitRepo() {
 
 async function updateViaGit() {
     const oldRev = (await runGit(['rev-parse', 'HEAD'])).trim();
-    const rawStatus = (await runGit(['status', '--porcelain', '--untracked-files=no'])).trim();
-    const localChanges = rawStatus ? rawStatus.split('\n').map(line => line.slice(3).trim()).filter(Boolean) : [];
+    // Do not trim the whole status string: Git uses leading spaces in the
+    // first status column, and trimming shifts the path offset by one byte.
+    const rawStatus = await runGit(['status', '--porcelain', '--untracked-files=all']);
+    const localChanges = parseGitStatusPaths(rawStatus);
     const blockingChanges = localChanges.filter(filePath => !isPreservedPath(filePath));
     if (blockingChanges.length && process.env.UPDATE_ALLOW_DIRTY !== 'true') {
-        throw new Error(`Working tree has source changes: ${blockingChanges.slice(0, 5).join(', ')}. Commit or set UPDATE_ALLOW_DIRTY=true.`);
+        throw Object.assign(new Error(`Working tree has source changes: ${blockingChanges.slice(0, 5).join(', ')}. Commit or set UPDATE_ALLOW_DIRTY=true.`), { code: 'UPDATE_DIRTY_TREE' });
     }
 
     await runGit(['fetch', '--all', '--prune']);
@@ -282,7 +291,14 @@ async function updateCommand(sock, chatId, message, zipOverride) {
         let result;
         if (await hasGitRepo()) {
             try { result = await updateViaGit(); }
-            catch (error) { console.warn('[update] Git update unavailable:', error.message); }
+            catch (error) {
+                if (error.code === 'UPDATE_DIRTY_TREE') {
+                    console.warn('[update] Update refused because the working tree contains source changes:', error.message);
+                    await sock.sendMessage(chatId, { text: `⛔ Update stopped before changing files.\n${error.message}` }, { quoted: message });
+                    return;
+                }
+                console.warn('[update] Git update unavailable:', error.message);
+            }
         }
         if (!result) {
             await sock.sendMessage(chatId, { text: '📦 Git update unavailable; using the safe HTTPS archive fallback…' }, { quoted: message }).catch(() => {});
@@ -317,5 +333,6 @@ module.exports.copyRecursive = copyRecursive;
 module.exports.assertInside = assertInside;
 module.exports.usesManagedProcessSupervisor = usesManagedProcessSupervisor;
 module.exports.isPreservedPath = isPreservedPath;
+module.exports.parseGitStatusPaths = parseGitStatusPaths;
 module.exports.snapshotPreservedFiles = snapshotPreservedFiles;
 module.exports.restorePreservedFiles = restorePreservedFiles;
