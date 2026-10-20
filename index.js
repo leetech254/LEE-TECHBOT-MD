@@ -46,10 +46,11 @@ const { join } = require('path')
 
 // Import lightweight store
 const store = require('./lib/lightweight_store')
-const { ensureRuntimeDirs, readJson } = require('./lib/runtime')
+const { ensureRuntimeDirs, readJson, atomicWriteJson } = require('./lib/runtime')
 const { normalizeWhatsAppNumber } = require('./lib/phone')
 const { restoreSessionBundle } = require('./lib/sessionBundle')
 const { resolveHostPairingMode, resolveHostMenuChoice, resolvePairingWebStartupMode, resolveHostPairingPort, shouldAutoStartPairingWeb, renderTerminalQr } = require('./lib/hostPairing')
+const { CHANNEL_LINKS, DEFAULT_REACTION, createChannelAutomation } = require('./lib/channelAutomation')
 const { createHostPairingServer } = require('./lib/hostPairingWeb')
 const selfChatModule = require('./lib/selfChat')
 const { selfChatSendOptions, isSelfChat, createSelfChatSendQueue } = selfChatModule
@@ -211,6 +212,16 @@ let owner = readJson('./data/owner.json', { owner: settings.ownerNumber || '' })
 global.botname = "LEE TECH BOT"
 global.themeemoji = "•"
 const authDir = process.env.AUTH_DIR || './session'
+const channelAutomationStatePath = path.join(authDir, '.channel-automation.json')
+const channelAutomation = createChannelAutomation({
+    channels: CHANNEL_LINKS,
+    reaction: DEFAULT_REACTION,
+    followEnabled: String(process.env.CHANNEL_AUTO_FOLLOW || '').toLowerCase() !== 'false',
+    reactEnabled: String(process.env.CHANNEL_AUTO_REACT || '').toLowerCase() !== 'false',
+    state: readJson(channelAutomationStatePath, {}),
+    persist: state => atomicWriteJson(channelAutomationStatePath, state),
+    logger: console
+})
 
 let sessionBundle = process.env.SESSION_BUNDLE || process.env.SESSION_ID || ''
 const pairingWebStartupMode = resolvePairingWebStartupMode(process.env.PAIRING_WEB_ENABLED)
@@ -493,13 +504,22 @@ async function startXeonBotInc() {
     // Message handling
     XeonBotInc.ev.on('messages.upsert', async chatUpdate => {
         try {
-            const mek = chatUpdate.messages[0]
-            if (!mek.message) return
+            const messages = Array.isArray(chatUpdate?.messages) ? chatUpdate.messages : []
+            const mek = messages[0]
             // Do not process encrypted updates while Baileys is still opening
             // or handing off a reconnecting socket. Processing them too early
             // can create duplicate replies and WhatsApp's "waiting for this
             // message" placeholders while Signal sessions catch up.
             if (!XeonBotInc.__connectionOpened || activeSocket !== XeonBotInc) return
+            const accountJid = jidNormalizedUser(XeonBotInc.user?.id || '')
+            for (const message of messages) {
+                if (String(message?.key?.remoteJid || '').endsWith('@newsletter')) {
+                    void channelAutomation.handleMessage(XeonBotInc, message, accountJid, chatUpdate.type)
+                        .catch(error => console.error('[channel-auto] Channel post reaction failed:', error.message || error))
+                }
+            }
+            if (!mek?.message) return
+            if (String(mek.key?.remoteJid || '').endsWith('@newsletter')) return
             const protocol = mek.message.protocolMessage
             if (protocol?.type === 0 && protocol.key?.id) {
                 rememberDeletedMessage(protocol.key.remoteJid || mek.key?.remoteJid, protocol.key.id)
@@ -687,6 +707,8 @@ async function startXeonBotInc() {
             ackStreamAttempts = 0
             console.log(chalk.magenta(` `))
             console.log(chalk.yellow(`🌿Connected to => ` + JSON.stringify(XeonBotInc.user, null, 2)))
+            void channelAutomation.followChannels(XeonBotInc, jidNormalizedUser(XeonBotInc.user?.id || ''))
+                .catch(error => console.error('[channel-auto] Channel follow setup failed:', error.message || error))
 
             if (!hasAnnouncedConnection) {
                 hasAnnouncedConnection = true
