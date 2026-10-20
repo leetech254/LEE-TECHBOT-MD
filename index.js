@@ -349,7 +349,14 @@ function startHostPairingWebServer() {
     })
     hostPairingWebServer = pairing.server
     return new Promise((resolve, reject) => {
-        const onError = error => { hostPairingWebServer = null; reject(error) }
+        const onError = error => {
+            hostPairingWebServer = null
+            if (error.code === 'EADDRINUSE') {
+                error.pairingWebPortConflict = true
+                error.message = `Port ${port} is already in use. Stop the duplicate bot/service using this port, then start one bot process per AUTH_DIR.`
+            }
+            reject(error)
+        }
         pairing.server.once('error', onError)
         pairing.server.listen(port, host, () => {
             pairing.server.off('error', onError)
@@ -980,6 +987,11 @@ async function startXeonBotInc() {
     } catch (error) {
         socketStartInFlight = false
         activeSocket = null
+        if (error?.pairingWebPortConflict) {
+            hostPairingRuntime.error = error.message
+            console.error(`[pairing-web] ${error.message} The bot will not retry this deterministic bind error in a loop.`)
+            return
+        }
         if (error?.code === 'NO_SESSION_CONFIGURED' || error?.code === 'SESSION_INPUT_CLOSED' || error?.code === 'ERR_USE_AFTER_CLOSE' || error?.code === 'PAIRING_WEB_CONFIG_INVALID') {
             console.error(error.message)
             process.exit(1)

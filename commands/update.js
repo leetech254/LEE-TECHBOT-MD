@@ -84,6 +84,13 @@ function isSafeUpdateUrl(value) {
     }
 }
 
+function usesManagedProcessSupervisor(env = process.env) {
+    return Boolean(
+        env.P_SERVER_UUID || env.PTERODACTYL_SERVER_UUID || env.KATABUMP_SERVER_ID || env.KATABUMP
+        || env.SERVER_PORT || env.DYNO || env.RENDER || env.RAILWAY_ENVIRONMENT || env.KOYEB_APP_NAME
+    );
+}
+
 function removeFile(file) {
     try { fs.rmSync(file, { recursive: true, force: true }); } catch {}
 }
@@ -247,7 +254,7 @@ async function restartProcess(sock) {
     const mode = String(process.env.RESTART_MODE || 'auto').toLowerCase();
     if (mode === 'none') return;
     if (process.env.RESTART_COMMAND) { await shellCommand(process.env.SHELL || '/bin/sh', ['-c', process.env.RESTART_COMMAND]); setTimeout(() => process.exit(0), 1500); return; }
-    const isPanel = Boolean(process.env.P_SERVER_UUID || process.env.PTERODACTYL_SERVER_UUID || process.env.KATABUMP_SERVER_ID || process.env.KATABUMP);
+    const isPanel = usesManagedProcessSupervisor(process.env);
     if (mode !== 'panel' && (process.env.pm_id || process.env.PM2_HOME || mode === 'pm2' || process.env.PM2_APP_NAME)) {
         const appName = String(process.env.PM2_APP_NAME || 'leetechbot').replace(/[^a-zA-Z0-9_.-]/g, '');
         try { await shellCommand('pm2', ['restart', appName]); setTimeout(() => process.exit(0), 1500); return; }
@@ -308,6 +315,7 @@ module.exports.updateViaZip = updateViaZip;
 module.exports.writeRestartNotice = writeRestartNotice;
 module.exports.copyRecursive = copyRecursive;
 module.exports.assertInside = assertInside;
+module.exports.usesManagedProcessSupervisor = usesManagedProcessSupervisor;
 module.exports.isPreservedPath = isPreservedPath;
 module.exports.snapshotPreservedFiles = snapshotPreservedFiles;
 module.exports.restorePreservedFiles = restorePreservedFiles;

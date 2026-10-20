@@ -18,6 +18,15 @@ test('updater exposes safe helper APIs', () => {
     assert.equal(typeof updater.updateViaGit, 'function');
     assert.equal(typeof updater.updateViaZip, 'function');
     assert.equal(typeof updater.writeRestartNotice, 'function');
+    assert.equal(typeof updater.usesManagedProcessSupervisor, 'function');
+});
+
+test('host restart detection uses the platform supervisor instead of starting a competing child', () => {
+    assert.equal(updater.usesManagedProcessSupervisor({ SERVER_PORT: '25034' }), true);
+    assert.equal(updater.usesManagedProcessSupervisor({ DYNO: 'web.1' }), true);
+    assert.equal(updater.usesManagedProcessSupervisor({ RENDER: 'true' }), true);
+    assert.equal(updater.usesManagedProcessSupervisor({ RAILWAY_ENVIRONMENT: 'production' }), true);
+    assert.equal(updater.usesManagedProcessSupervisor({}), false);
 });
 
 test('restart notice records the initiating chat and revision', () => {
@@ -46,6 +55,8 @@ test('runtime settings are treated as preserved paths', () => {
     assert.equal(updater.isPreservedPath('env'), true);
     assert.equal(updater.isPreservedPath('config.env'), true);
     assert.equal(updater.isPreservedPath('data/userGroupData.json'), true);
+    assert.equal(updater.isPreservedPath('data/autoStatus.json'), true);
+    assert.equal(updater.isPreservedPath('data/channel-auto-state.json'), true);
     assert.equal(updater.isPreservedPath('session/creds.json'), true);
     assert.equal(updater.isPreservedPath('commands/update.js'), false);
 });
