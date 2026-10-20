@@ -32,6 +32,12 @@ test('anti-link supports scam-only and specific denied domains', () => {
     assert.equal(shouldDeleteLink('Visit https://safe.example.com', { enabled: true, mode: 'custom', allowDomains: ['example.com'] }), false);
 });
 
+test('anti-link does not treat email addresses as website links', () => {
+    const settings = { enabled: true, mode: 'all' };
+    assert.equal(shouldDeleteLink('Contact admin@example.com for support', settings), false);
+    assert.equal(shouldDeleteLink('Visit example.com for details', settings), true);
+});
+
 test('silent anti-link deletes only and sends no warning or information', async () => {
     const sent = [];
     const group = '120363000000000001@g.us';
@@ -46,6 +52,52 @@ test('silent anti-link deletes only and sends no warning or information', async 
         await Antilink({ key: { remoteJid: group, participant: sender, id: 'message-1' }, message: { conversation: 'https://blocked.example/scam' } }, sock);
         assert.equal(sent.length, 1);
         assert.deepEqual(sent[0].payload, { delete: { remoteJid: group, participant: sender, id: 'message-1' } });
+    } finally {
+        await removeAntilink(group, 'on');
+    }
+});
+
+test('silent deletion does not prevent configured kick enforcement or its removal notice', async () => {
+    const sent = [];
+    const removals = [];
+    const group = '120363000000000011@g.us';
+    const sender = '254700000011@s.whatsapp.net';
+    const sock = {
+        user: { id: '254700000099@s.whatsapp.net' },
+        async groupMetadata() { return { participants: [{ id: '254700000099@s.whatsapp.net', admin: 'admin' }] }; },
+        async groupParticipantsUpdate(chatId, jids, action) { removals.push({ chatId, jids, action }); },
+        async sendMessage(chatId, payload) { sent.push({ chatId, payload }); }
+    };
+    try {
+        await setAntilink(group, 'on', 'kick', { mode: 'all', silent: true });
+        await Antilink({ key: { remoteJid: group, participant: sender, id: 'kick-message-1' }, message: { conversation: 'https://blocked.example' } }, sock);
+        assert.deepEqual(removals, [{ chatId: group, jids: [sender], action: 'remove' }]);
+        assert.equal(sent.filter(({ payload }) => payload.delete).length, 1);
+        assert.match(sent.find(({ payload }) => payload.text)?.payload.text, /was removed for sending a blocked link/i);
+    } finally {
+        await removeAntilink(group, 'on');
+    }
+});
+
+test('silent deletion still counts configured warnings and enforces the threshold', async () => {
+    const sent = [];
+    const removals = [];
+    const group = '120363000000000012@g.us';
+    const sender = '254700000012@s.whatsapp.net';
+    const sock = {
+        user: { id: '254700000099@s.whatsapp.net' },
+        async groupMetadata() { return { participants: [{ id: '254700000099@s.whatsapp.net', admin: 'admin' }] }; },
+        async groupParticipantsUpdate(chatId, jids, action) { removals.push({ chatId, jids, action }); },
+        async sendMessage(chatId, payload) { sent.push({ chatId, payload }); }
+    };
+    try {
+        await setAntilink(group, 'on', 'warn', { mode: 'all', silent: true, threshold: 2 });
+        for (let index = 1; index <= 2; index += 1) {
+            await Antilink({ key: { remoteJid: group, participant: sender, id: `warn-message-${index}` }, message: { conversation: `https://blocked${index}.example` } }, sock);
+        }
+        assert.deepEqual(removals, [{ chatId: group, jids: [sender], action: 'remove' }]);
+        assert.equal(sent.filter(({ payload }) => payload.delete).length, 2);
+        assert.equal(sent.filter(({ payload }) => payload.text).length, 2);
     } finally {
         await removeAntilink(group, 'on');
     }
@@ -195,6 +247,43 @@ test('anti-link enable confirmation shows the group name instead of the JID', as
         await removeAntilink(group, 'on');
         if (originalState === null) fs.rmSync(stateFile, { force: true });
         else fs.writeFileSync(stateFile, originalState);
+    }
+});
+
+test('anti-link off/on commands preserve saved policy and domain rules', async () => {
+    const sent = [];
+    const group = '120363000000000013@g.us';
+    const sock = {
+        async groupMetadata() { return { subject: 'Persistent Rules Group' }; },
+        async sendMessage(chatId, payload) { sent.push(payload.text); }
+    };
+    try {
+        await setAntilink(group, 'on', 'warn', {
+            mode: 'custom', silent: true, threshold: 7,
+            allowDomains: ['example.org'], denyDomains: ['blocked.example']
+        });
+        await handleAntilinkCommand(sock, group, '.antilink off', 'admin@s.whatsapp.net', true, { key: { remoteJid: group } }, false);
+        const disabled = await getAntilink(group, 'on');
+        assert.equal(disabled.enabled, false);
+        assert.equal(disabled.action, 'warn');
+        assert.equal(disabled.mode, 'custom');
+        assert.equal(disabled.threshold, 7);
+        assert.equal(disabled.silent, true);
+        assert.deepEqual(disabled.allowDomains, ['example.org']);
+        assert.deepEqual(disabled.denyDomains, ['blocked.example']);
+
+        await handleAntilinkCommand(sock, group, '.antilink on', 'admin@s.whatsapp.net', true, { key: { remoteJid: group } }, false);
+        const enabled = await getAntilink(group, 'on');
+        assert.equal(enabled.enabled, true);
+        assert.equal(enabled.action, 'warn');
+        assert.equal(enabled.mode, 'custom');
+        assert.equal(enabled.threshold, 7);
+        assert.equal(enabled.silent, true);
+        assert.deepEqual(enabled.allowDomains, ['example.org']);
+        assert.deepEqual(enabled.denyDomains, ['blocked.example']);
+        assert.match(sent[0], /Saved rules were kept/);
+    } finally {
+        await removeAntilink(group, 'on');
     }
 });
 

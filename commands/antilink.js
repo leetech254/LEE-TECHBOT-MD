@@ -1,6 +1,6 @@
 'use strict';
 
-const { setAntilink, getAntilink, removeAntilink } = require('../lib/index');
+const { setAntilink, getAntilink } = require('../lib/index');
 const isOwnerOrSudo = require('../lib/isOwner');
 const { getGroupMetadata } = require('../lib/groupMetadata');
 const { resolveGroupTarget } = require('../lib/groupTarget');
@@ -95,12 +95,22 @@ async function handleAntilinkCommand(sock, chatId, userMessage, senderId, isSend
         const action = String(rawArgs.shift() || 'get').toLowerCase();
         if (action === 'on') {
             const config = parseConfigArgs(rawArgs);
-            const result = await setAntilink(targetChatId, 'on', 'delete', { mode: config.mode || 'all', silent: config.silent === undefined ? true : config.silent, allowDomains: config.allowDomains || [], denyDomains: config.denyDomains || [] });
-            return sock.sendMessage(chatId, { text: result ? `✅ Anti-link enabled for ${targetLabel}. Mode: ${config.mode || 'all'}; silent: ${config.silent === false ? 'off' : 'on'}.` : '❌ Failed to enable anti-link.' }, { quoted: message });
+            const current = await getAntilink(targetChatId, 'on') || {};
+            const mode = config.mode || current.mode || 'all';
+            const silent = config.silent === undefined ? (current.silent !== false) : config.silent;
+            const result = await setAntilink(targetChatId, 'on', current.action || 'delete', {
+                ...config,
+                mode,
+                silent,
+                allowDomains: config.allowDomains || current.allowDomains || [],
+                denyDomains: config.denyDomains || current.denyDomains || []
+            });
+            return sock.sendMessage(chatId, { text: result ? `✅ Anti-link enabled for ${targetLabel}. Mode: ${mode}; silent deletion: ${silent ? 'on' : 'off'}; action: ${current.action || 'delete'}.` : '❌ Failed to enable anti-link.' }, { quoted: message });
         }
         if (action === 'off') {
-            await removeAntilink(targetChatId, 'on');
-            return sock.sendMessage(chatId, { text: `✅ Anti-link disabled for ${targetLabel}.` }, { quoted: message });
+            const current = await getAntilink(targetChatId, 'on') || {};
+            const result = await setAntilink(targetChatId, 'off', current.action || 'delete', {});
+            return sock.sendMessage(chatId, { text: result ? `✅ Anti-link disabled for ${targetLabel}. Saved rules were kept; use .antilink on to re-enable them.` : '❌ Failed to disable anti-link.' }, { quoted: message });
         }
         if (action === 'action') {
             const nextAction = String(rawArgs[0] || '').toLowerCase();

@@ -133,7 +133,13 @@ Keep `AUTH_DIR` on persistent host storage and run only one bot process against 
 .create a cinematic mountain sunrise with a lake reflection
 .create logo a clean blue-and-silver logo for LEE TECH
 .logo minimalist logo for a coffee shop named Sunrise
+.antilink on all silent  # Silently delete links in this group
+.antilink action warn    # Or: delete, kick, ban
+.antilink threshold 3
+.antilink get            # Show mode, action, threshold, silence, and domain rules
 ```
+
+Anti-link configuration is saved per group. Use `.antilink set <all|scam|whatsapp|telegram|custom> [silent|loud] [allow domains] [deny domains]` to tune link rules; `.antilink off` pauses enforcement without erasing those settings, and `.antilink on` resumes them. Silent mode suppresses only the deleted-link notice; configured warning/removal actions still run. The bot must be a group admin to delete links or remove members. The linked owner can also manage a group from DM using `.antilink <group-number|group-jid> <setting>`.
 
 Image creation is available through `.create`, `.design`, `.imagine`, `.flux`, `.dalle`, `.logo`, and `.firelogo`. The default image endpoint is configurable with `IMAGE_GENERATION_URL` (an HTTPS URL template containing `{prompt}`); an optional bearer token can be set with `IMAGE_GENERATION_API_KEY`. Image requests have a timeout and a 12 MB response cap; provider/network errors return actionable feedback instead of leaving the command hanging.
 
