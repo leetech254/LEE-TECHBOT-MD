@@ -13,7 +13,7 @@ const PROVIDER_COMMANDS = new Set([
     'img2txt', 'imgbb', 'ocr', 'pickupline', 'predict', 'qrscan', 'roast',
     'stickkill', 'story', 'tiktokstalk', 'tiny'
 ]);
-const IMAGE_ALIASES = new Set(['brat', 'carbon', 'fakechannel', 'fakedana', 'fakeigstory', 'firelogo']);
+const IMAGE_ALIASES = new Set(['brat', 'carbon', 'fakechannel', 'fakedana', 'fakeigstory', 'toanime']);
 const MEDIA_OUTPUTS = {
     toaudio: { ext: 'mp3', args: ['-vn', '-codec:a', 'libmp3lame', '-q:a', '4'], type: 'audio', mimetype: 'audio/mpeg' },
     tomp3: { ext: 'mp3', args: ['-vn', '-codec:a', 'libmp3lame', '-q:a', '4'], type: 'audio', mimetype: 'audio/mpeg' },
@@ -109,12 +109,16 @@ async function legacyCommand(sock, chatId, message, command, args = []) {
             return reply(sock, chatId, message, '❌ Could not generate the QR code.');
         }
     }
+    if (command === 'firelogo') {
+        const { designCommand } = require('./design');
+        return designCommand(sock, chatId, message, ['logo', ...args]);
+    }
     if (IMAGE_ALIASES.has(command)) {
-        const imagineCommand = require('./imagine');
         const prompt = args.join(' ').trim();
         if (!prompt) return reply(sock, chatId, message, `Usage: .${command} <prompt>`);
-        const routed = { ...message, message: { conversation: `.imagine ${prompt}` } };
-        return imagineCommand(sock, chatId, routed);
+        const routed = command === 'toanime' ? `anime-style illustration of ${prompt}` : prompt;
+        const { designCommand } = require('./design');
+        return designCommand(sock, chatId, message, [routed]);
     }
     if (textResponses[command]) {
         const choices = textResponses[command];

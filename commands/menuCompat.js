@@ -53,6 +53,7 @@ const { saveIdentity } = require('../lib/identity');
 const { tagAllCommand, contactTagCommand, tagAdminsCommand } = require('./groupTags');
 const studentTools = require('./studentTools');
 const { whoisCommand, pingHostCommand, dnsCommand, scholarCommand, mathCommand, pdfCommand } = require('./academicTools');
+const { designCommand } = require('./design');
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const NOTES_FILE = path.join(DATA_DIR, 'menuNotes.json');
@@ -229,6 +230,12 @@ async function menuCompatCommand(sock, chatId, message, input, context = {}) {
     const command = (parts.shift() || '').replace(/^[./]/, '').toLowerCase();
     const args = parts;
     if (!command) return false;
+
+    if (['create', 'logo', 'design', 'imagine'].includes(command)) {
+        const promptArgs = command === 'logo' ? ['logo', ...args] : args;
+        await designCommand(sock, chatId, message, promptArgs);
+        return true;
+    }
 
     if (command === 'whois') { await whoisCommand(sock, chatId, message, args); return true; }
     if (command === 'pinghost') { await pingHostCommand(sock, chatId, message, args); return true; }

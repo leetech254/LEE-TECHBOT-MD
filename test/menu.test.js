@@ -19,6 +19,14 @@ test('category aliases resolve to focused menus', () => {
     assert.equal(getCategory('download').key, 'downloads');
 });
 
+test('image maker category exposes working image and logo commands', () => {
+    const category = getCategory('image');
+    for (const command of ['create', 'logo', 'design', 'imagine', 'flux', 'dalle', 'firelogo']) {
+        assert.ok(category.commands.includes(command), `image category should include ${command}`);
+    }
+    assert.equal(category.commands.includes('deepfake'), false);
+});
+
 test('catalog commands are unique and menu exposes category navigation', () => {
     const commands = allCommands();
     assert.equal(new Set(commands).size, commands.length);

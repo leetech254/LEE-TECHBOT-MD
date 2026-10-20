@@ -130,7 +130,12 @@ Keep `AUTH_DIR` on persistent host storage and run only one bot process against 
 .health               # Check bot health
 .mode private         # Restrict use to owner and sudo users
 .tostatus hello 👋    # Post text to WhatsApp Status
+.create a cinematic mountain sunrise with a lake reflection
+.create logo a clean blue-and-silver logo for LEE TECH
+.logo minimalist logo for a coffee shop named Sunrise
 ```
+
+Image creation is available through `.create`, `.design`, `.imagine`, `.flux`, `.dalle`, `.logo`, and `.firelogo`. The default image endpoint is configurable with `IMAGE_GENERATION_URL` (an HTTPS URL template containing `{prompt}`); an optional bearer token can be set with `IMAGE_GENERATION_API_KEY`. Image requests have a timeout and a 12 MB response cap; provider/network errors return actionable feedback instead of leaving the command hanging.
 
 The bot also includes group moderation, anti-link controls, stickers, downloads, text-to-speech, AI integrations, games, media tools, and owner-only group management.
 

@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const axios = require('axios');
 const { menuCompatCommand } = require('../commands/menuCompat');
 const { setAntilink, removeAntilink } = require('../lib/index');
 
@@ -22,6 +23,55 @@ test('missing test command is routed by compatibility handler', async () => {
     const handled = await menuCompatCommand(sock, '123@s.whatsapp.net', message, '.test', {});
     assert.equal(handled, true);
     assert.match(sock.sent[0].payload.text, /router is working/i);
+});
+
+test('.create logo routes to image generation and returns the generated image', async () => {
+    const sock = mockSock();
+    const previousUrl = process.env.IMAGE_GENERATION_URL;
+    const previousGet = axios.get;
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/XZwAAAAASUVORK5CYII=', 'base64');
+    let requestedUrl = '';
+    try {
+        process.env.IMAGE_GENERATION_URL = 'https://images.example/create/{prompt}';
+        axios.get = async (url, options) => {
+            requestedUrl = url;
+            assert.equal(options.responseType, 'arraybuffer');
+            assert.ok(options.timeout >= 10_000);
+            return { data: png };
+        };
+        const handled = await menuCompatCommand(sock, '123@s.whatsapp.net', message,
+            '.create logo a modern blue-and-silver logo for LEE TECH', {});
+        assert.equal(handled, true);
+        assert.match(decodeURIComponent(requestedUrl), /create a polished brand logo/i);
+        assert.match(decodeURIComponent(requestedUrl), /LEE TECH/);
+        assert.match(sock.sent[0].payload.text, /Creating your logo/);
+        assert.equal(sock.sent[1].payload.image.equals(png), true);
+        assert.equal(sock.sent[1].payload.mimetype, 'image/png');
+        assert.match(sock.sent[1].payload.caption, /Logo generated/);
+
+        const logoSock = mockSock();
+        assert.equal(await menuCompatCommand(logoSock, '123@s.whatsapp.net', message, '.logo a warm orange fox emblem', {}), true);
+        assert.match(logoSock.sent[0].payload.text, /Creating your logo/);
+        assert.equal(logoSock.sent[1].payload.image.equals(png), true);
+    } finally {
+        axios.get = previousGet;
+        if (previousUrl === undefined) delete process.env.IMAGE_GENERATION_URL;
+        else process.env.IMAGE_GENERATION_URL = previousUrl;
+    }
+});
+
+test('.create handles provider failures with actionable feedback', async () => {
+    const sock = mockSock();
+    const previousGet = axios.get;
+    try {
+        axios.get = async () => { throw Object.assign(new Error('provider unavailable'), { response: { status: 503 } }); };
+        const handled = await menuCompatCommand(sock, '123@s.whatsapp.net', message, '.create a watercolor fox', {});
+        assert.equal(handled, true);
+        assert.match(sock.sent.at(-1).payload.text, /temporarily unavailable \(HTTP 503\)/);
+        assert.doesNotMatch(sock.sent.at(-1).payload.text, /handler is not available/i);
+    } finally {
+        axios.get = previousGet;
+    }
 });
 
 test('speed and ping aliases use the local latency handler', async () => {
