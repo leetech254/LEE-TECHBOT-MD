@@ -45,15 +45,6 @@
 > **Node.js:** 20 or newer.
 > **Important:** Free hosts may sleep, restart, or delete storage. Keep the bot’s auth/session directory persistent and run one instance only.
 
-### WhatsApp channel follow and reactions
-
-After the linked bot connects, it automatically follows only the two configured WhatsApp channels below and randomly chooses a reaction for each new post from **❤️, 👍, 🔥, ✨, 🙌, 💯, 👏, 🎉, and 😍**. A post receives only one reaction from the bot; duplicate events and history sync do not trigger extra reactions. It does not follow channels supplied remotely or react to posts in other channels. Successful follows and recent reaction IDs are recorded in `AUTH_DIR/.channel-automation.json` per linked WhatsApp account to avoid repeating actions after reconnects or restarts. Keep `AUTH_DIR` persistent for this state to survive host restarts.
-
-- [💠 ❰ TECH - DIGITAL SOLUTIONS HUB ❱](https://whatsapp.com/channel/0029Vb9GMft7YSd5GfsIyZ2H)
-- [ORBIT GROWTH - GROW FAST](https://whatsapp.com/channel/0029VbBu1EgJUM2iVI3tPE0S)
-
-Set `CHANNEL_AUTO_FOLLOW=false` to disable automatic follows, or `CHANNEL_AUTO_REACT=false` to disable randomized reactions. Both behaviors are enabled by default. Channel actions use the connected WhatsApp account and may be visible to channel administrators and other viewers.
-
 ### Cross-host deployment
 
 The bot's direct-pairing web listener binds to `0.0.0.0` and uses `PAIRING_WEB_PORT`, then `SERVER_PORT` (panel hosts such as Bot-Hosting), then `PORT` (Heroku, Render, Railway, Koyeb and many other Node PaaS providers), then `8000` for local use. Use a **web service/process** when you want a public pairing page; a worker-only process has no public HTTP route.
