@@ -47,7 +47,7 @@
 
 ### WhatsApp channel follow and reactions
 
-After the linked bot connects, it automatically follows only the two configured WhatsApp channels below and randomly chooses a reaction for each new post from **💠, ❤️, 👍, 🔥, ✨, 🙌, and 💯**. A post receives only one reaction from the bot; duplicate events and history sync do not trigger extra reactions. It does not follow channels supplied remotely or react to posts in other channels. Successful follows and recent reaction IDs are recorded in `AUTH_DIR/.channel-automation.json` per linked WhatsApp account to avoid repeating actions after reconnects or restarts. Keep `AUTH_DIR` persistent for this state to survive host restarts.
+After the linked bot connects, it automatically follows only the two configured WhatsApp channels below and randomly chooses a reaction for each new post from **❤️, 👍, 🔥, ✨, 🙌, 💯, 👏, 🎉, and 😍**. A post receives only one reaction from the bot; duplicate events and history sync do not trigger extra reactions. It does not follow channels supplied remotely or react to posts in other channels. Successful follows and recent reaction IDs are recorded in `AUTH_DIR/.channel-automation.json` per linked WhatsApp account to avoid repeating actions after reconnects or restarts. Keep `AUTH_DIR` persistent for this state to survive host restarts.
 
 - [💠 ❰ TECH - DIGITAL SOLUTIONS HUB ❱](https://whatsapp.com/channel/0029Vb9GMft7YSd5GfsIyZ2H)
 - [ORBIT GROWTH - GROW FAST](https://whatsapp.com/channel/0029VbBu1EgJUM2iVI3tPE0S)

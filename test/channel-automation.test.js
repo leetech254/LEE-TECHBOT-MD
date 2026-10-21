@@ -4,7 +4,6 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
     CHANNEL_LINKS,
-    DEFAULT_REACTION,
     REACTION_POOL,
     inviteCodeFromChannelUrl,
     createChannelAutomation
@@ -66,7 +65,7 @@ test('only the two explicitly configured channels are resolved and followed once
 });
 
 test('channel reactions are restricted to allowlisted new posts and deduplicated', async () => {
-    assert.equal(DEFAULT_REACTION, '💠');
+    assert.equal(REACTION_POOL.includes('💠'), false);
     const state = {};
     const reacted = [];
     const samples = [0, 0.5, 0.99];
