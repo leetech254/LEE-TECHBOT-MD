@@ -74,6 +74,18 @@ test('project-local npm cache files do not block updates but npm configuration f
     assert.equal(updater.isIgnorableLocalPath('commands/update.js'), false);
 });
 
+test('update safety accepts files already equal to target main but rejects divergent local-only files', async () => {
+    assert.equal(await updater.matchesGitRevision('README.md', 'HEAD'), true);
+    const localOnlyName = `.updater-test-${process.pid}-${Date.now()}.txt`;
+    const localOnlyPath = path.join(process.cwd(), localOnlyName);
+    fs.writeFileSync(localOnlyPath, 'local-only content');
+    try {
+        assert.equal(await updater.matchesGitRevision(localOnlyName, 'HEAD'), false);
+    } finally {
+        fs.rmSync(localOnlyPath, { force: true });
+    }
+});
+
 test('preservation snapshot can be created and restored safely', () => {
     const snapshot = updater.snapshotPreservedFiles();
     assert.ok(snapshot.snapshotRoot);

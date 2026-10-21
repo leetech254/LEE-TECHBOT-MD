@@ -121,6 +121,8 @@ Keep `AUTH_DIR` on persistent host storage and run only one bot process against 
 
 If startup reports `EADDRINUSE` for `SERVER_PORT`/`PORT`, another process still owns the pairing web listener. Stop the app completely in the hosting panel, confirm the old console process has exited, and start exactly one instance. Check that the panel startup command, PM2, or a custom `RESTART_COMMAND` is not launching a second copy. Keep the existing `AUTH_DIR`; do not delete or regenerate the WhatsApp session to fix a port collision. Repeated WhatsApp 503/428 disconnects can be transient, but if they continue, first rule out multiple bot processes using the same `AUTH_DIR` and ensure the host permits outbound WebSocket connections.
 
+The updater compares local files with the fetched `origin/main` version. Files already identical to that version (for example, files copied by an earlier ZIP update) are safe to normalize during the update; genuinely different source edits are still protected from being overwritten.
+
 > Never share `SESSION_BUNDLE`, commit `.env`, or run multiple bot processes with the same auth directory.
 
 ---

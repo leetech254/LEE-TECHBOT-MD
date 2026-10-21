@@ -58,6 +58,32 @@ function parseGitStatusPaths(porcelain) {
         .filter(Boolean);
 }
 
+function fileMatchesContents(filePath, expectedContent) {
+    try {
+        if (!fs.lstatSync(filePath).isFile()) return false;
+        return fs.readFileSync(filePath, 'utf8') === String(expectedContent);
+    } catch {
+        return false;
+    }
+}
+
+async function matchesGitRevision(filePath, revision) {
+    const absolutePath = path.resolve(process.cwd(), filePath);
+    try {
+        const expectedContent = await runGit(['show', `${revision}:${filePath}`]);
+        return fileMatchesContents(absolutePath, expectedContent);
+    } catch {
+        // A locally deleted file is safe only when the target revision also
+        // deletes it. Confirm the tree entry is absent before accepting it.
+        try {
+            await runGit(['cat-file', '-e', `${revision}:${filePath}`]);
+            return false;
+        } catch {
+            return !fs.existsSync(absolutePath);
+        }
+    }
+}
+
 function snapshotPreservedFiles() {
     const snapshotRoot = fs.mkdtempSync(path.join(require('os').tmpdir(), 'lee-update-preserve-'));
     const copied = [];
@@ -169,14 +195,19 @@ async function updateViaGit() {
     // first status column, and trimming shifts the path offset by one byte.
     const rawStatus = await runGit(['status', '--porcelain', '--untracked-files=all']);
     const localChanges = parseGitStatusPaths(rawStatus);
-    const blockingChanges = localChanges.filter(filePath => !isIgnorableLocalPath(filePath));
-    if (blockingChanges.length && process.env.UPDATE_ALLOW_DIRTY !== 'true') {
-        throw Object.assign(new Error(`Working tree has source changes: ${blockingChanges.slice(0, 5).join(', ')}. Commit or set UPDATE_ALLOW_DIRTY=true.`), { code: 'UPDATE_DIRTY_TREE' });
-    }
-
     await runGit(['fetch', '--all', '--prune']);
     const newRev = (await runGit(['rev-parse', 'origin/main'])).trim();
     if (!/^[0-9a-f]{40}$/i.test(newRev)) throw new Error('Remote update returned an invalid revision');
+    const candidateChanges = localChanges.filter(filePath => !isIgnorableLocalPath(filePath));
+    const blockingChanges = [];
+    if (process.env.UPDATE_ALLOW_DIRTY !== 'true') {
+        for (const filePath of candidateChanges) {
+            if (!await matchesGitRevision(filePath, newRev)) blockingChanges.push(filePath);
+        }
+    }
+    if (blockingChanges.length) {
+        throw Object.assign(new Error(`Local files differ from origin/main: ${blockingChanges.slice(0, 5).join(', ')}. Commit the edits, restore them, or set UPDATE_ALLOW_DIRTY=true only if you accept replacing them.`), { code: 'UPDATE_DIRTY_TREE' });
+    }
     const alreadyUpToDate = oldRev === newRev;
     const commits = alreadyUpToDate ? '' : await runGit(['log', '--pretty=format:%h %s (%an)', `${oldRev}..${newRev}`]);
     const files = alreadyUpToDate ? '' : await runGit(['diff', '--name-status', oldRev, newRev]);
@@ -340,5 +371,7 @@ module.exports.usesManagedProcessSupervisor = usesManagedProcessSupervisor;
 module.exports.isPreservedPath = isPreservedPath;
 module.exports.isIgnorableLocalPath = isIgnorableLocalPath;
 module.exports.parseGitStatusPaths = parseGitStatusPaths;
+module.exports.fileMatchesContents = fileMatchesContents;
+module.exports.matchesGitRevision = matchesGitRevision;
 module.exports.snapshotPreservedFiles = snapshotPreservedFiles;
 module.exports.restorePreservedFiles = restorePreservedFiles;
