@@ -46,6 +46,11 @@ function isPreservedPath(filePath) {
     return PRESERVED_PATHS.some(prefix => prefix.endsWith('/') ? normalized.startsWith(prefix) : normalized === prefix);
 }
 
+function isIgnorableLocalPath(filePath) {
+    const normalized = String(filePath || '').replace(/\\/g, '/').replace(/^\.\//, '');
+    return isPreservedPath(normalized) || normalized === '.npm' || normalized.startsWith('.npm/');
+}
+
 function parseGitStatusPaths(porcelain) {
     return String(porcelain || '').split(/\r?\n/)
         .filter(line => line.trim().length >= 4)
@@ -164,7 +169,7 @@ async function updateViaGit() {
     // first status column, and trimming shifts the path offset by one byte.
     const rawStatus = await runGit(['status', '--porcelain', '--untracked-files=all']);
     const localChanges = parseGitStatusPaths(rawStatus);
-    const blockingChanges = localChanges.filter(filePath => !isPreservedPath(filePath));
+    const blockingChanges = localChanges.filter(filePath => !isIgnorableLocalPath(filePath));
     if (blockingChanges.length && process.env.UPDATE_ALLOW_DIRTY !== 'true') {
         throw Object.assign(new Error(`Working tree has source changes: ${blockingChanges.slice(0, 5).join(', ')}. Commit or set UPDATE_ALLOW_DIRTY=true.`), { code: 'UPDATE_DIRTY_TREE' });
     }
@@ -333,6 +338,7 @@ module.exports.copyRecursive = copyRecursive;
 module.exports.assertInside = assertInside;
 module.exports.usesManagedProcessSupervisor = usesManagedProcessSupervisor;
 module.exports.isPreservedPath = isPreservedPath;
+module.exports.isIgnorableLocalPath = isIgnorableLocalPath;
 module.exports.parseGitStatusPaths = parseGitStatusPaths;
 module.exports.snapshotPreservedFiles = snapshotPreservedFiles;
 module.exports.restorePreservedFiles = restorePreservedFiles;

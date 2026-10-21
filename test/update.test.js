@@ -67,6 +67,13 @@ test('Git porcelain parsing preserves leading status spaces and complete runtime
     assert.deepEqual(paths.filter(item => !updater.isPreservedPath(item)), ['commands/example.js']);
 });
 
+test('project-local npm cache files do not block updates but npm configuration files do', () => {
+    assert.equal(updater.isIgnorableLocalPath('.npm/_cacache/CACHEDIR.TAG'), true);
+    assert.equal(updater.isIgnorableLocalPath('.npm/_cacache/content-v2/sha512/example'), true);
+    assert.equal(updater.isIgnorableLocalPath('.npmrc'), false);
+    assert.equal(updater.isIgnorableLocalPath('commands/update.js'), false);
+});
+
 test('preservation snapshot can be created and restored safely', () => {
     const snapshot = updater.snapshotPreservedFiles();
     assert.ok(snapshot.snapshotRoot);
