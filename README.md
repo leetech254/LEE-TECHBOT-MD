@@ -66,7 +66,7 @@ For every host, use one running bot process per `AUTH_DIR`, allow outbound HTTPS
 
 | Method | Button |
 |--------|--------|
-| **Pairing Site** | <a href="https://proper-badger-techlee-pair.koyeb.app/"><img src="https://img.shields.io/badge/Pair%20WhatsApp-25D366?style=for-the-badge&logo=whatsapp&logoColor=white" alt="Open pairing site"></a> |
+| **Pairing Site** | <a href="https://lee-techbot-mdpair-hmtloa.hostkb.com/"><img src="https://img.shields.io/badge/Pair%20WhatsApp-25D366?style=for-the-badge&logo=whatsapp&logoColor=white" alt="Open pairing site"></a> |
 
 </div>
 
