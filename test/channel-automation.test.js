@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const {
     CHANNEL_LINKS,
     DEFAULT_REACTION,
+    REACTION_POOL,
     inviteCodeFromChannelUrl,
     createChannelAutomation
 } = require('../lib/channelAutomation');
@@ -68,7 +69,14 @@ test('channel reactions are restricted to allowlisted new posts and deduplicated
     assert.equal(DEFAULT_REACTION, '💠');
     const state = {};
     const reacted = [];
-    const automation = createChannelAutomation({ state, persist() {}, logger: silentLogger });
+    const samples = [0, 0.5, 0.99];
+    let randomCalls = 0;
+    const automation = createChannelAutomation({
+        state,
+        persist() {},
+        logger: silentLogger,
+        random: () => samples[randomCalls++]
+    });
     const socket = {
         async newsletterMetadata(_type, code) { return { id: code === '0029Vb9GMft7YSd5GfsIyZ2H' ? '120363000000000001@newsletter' : '120363000000000002@newsletter' }; },
         async newsletterFollow() {},
@@ -81,12 +89,23 @@ test('channel reactions are restricted to allowlisted new posts and deduplicated
     const post = { key: { remoteJid: channel, server_id: 'post-1', fromMe: false }, message: { conversation: 'News' } };
     assert.equal(await automation.handleMessage(socket, post, account, 'notify'), true);
     assert.equal(await automation.handleMessage(socket, post, account, 'notify'), true);
-    assert.deepEqual(reacted, [[channel, 'post-1', '💠']]);
+    assert.deepEqual(reacted, [[channel, 'post-1', REACTION_POOL[0]]]);
+
+    await automation.handleMessage(socket, { ...post, key: { ...post.key, server_id: 'post-2' } }, account, 'notify');
+    const secondChannel = '120363000000000002@newsletter';
+    await automation.handleMessage(socket, { ...post, key: { ...post.key, remoteJid: secondChannel, server_id: 'post-3' } }, account, 'notify');
+    assert.deepEqual(reacted, [
+        [channel, 'post-1', REACTION_POOL[0]],
+        [channel, 'post-2', REACTION_POOL[Math.floor(0.5 * REACTION_POOL.length)]],
+        [secondChannel, 'post-3', REACTION_POOL[REACTION_POOL.length - 1]]
+    ]);
+    assert.equal(new Set(reacted.map(item => item[2])).size, 3);
+    assert.equal(randomCalls, 3, 'duplicate posts must not consume another random choice');
 
     assert.equal(await automation.handleMessage(socket, { ...post, key: { ...post.key, server_id: 'history-1' } }, account, 'append'), true);
     assert.equal(await automation.handleMessage(socket, { ...post, key: { ...post.key, remoteJid: 'another@newsletter', server_id: 'post-2' } }, account, 'notify'), true);
     assert.equal(await automation.handleMessage(socket, { ...post, key: { remoteJid: '12345@s.whatsapp.net', id: 'dm-1' } }, account, 'notify'), false);
-    assert.equal(reacted.length, 1);
+    assert.equal(reacted.length, 3);
 });
 
 test('a failed channel follow does not prevent attempting the other configured channel', async () => {

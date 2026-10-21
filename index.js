@@ -50,7 +50,7 @@ const { ensureRuntimeDirs, readJson, atomicWriteJson } = require('./lib/runtime'
 const { normalizeWhatsAppNumber } = require('./lib/phone')
 const { restoreSessionBundle } = require('./lib/sessionBundle')
 const { resolveHostPairingMode, resolveHostMenuChoice, resolvePairingWebStartupMode, resolveHostPairingPort, shouldAutoStartPairingWeb, renderTerminalQr } = require('./lib/hostPairing')
-const { CHANNEL_LINKS, DEFAULT_REACTION, createChannelAutomation } = require('./lib/channelAutomation')
+const { CHANNEL_LINKS, createChannelAutomation } = require('./lib/channelAutomation')
 const { createHostPairingServer } = require('./lib/hostPairingWeb')
 const selfChatModule = require('./lib/selfChat')
 const { selfChatSendOptions, isSelfChat, createSelfChatSendQueue } = selfChatModule
@@ -215,7 +215,6 @@ const authDir = process.env.AUTH_DIR || './session'
 const channelAutomationStatePath = path.join(authDir, '.channel-automation.json')
 const channelAutomation = createChannelAutomation({
     channels: CHANNEL_LINKS,
-    reaction: DEFAULT_REACTION,
     followEnabled: String(process.env.CHANNEL_AUTO_FOLLOW || '').toLowerCase() !== 'false',
     reactEnabled: String(process.env.CHANNEL_AUTO_REACT || '').toLowerCase() !== 'false',
     state: readJson(channelAutomationStatePath, {}),
