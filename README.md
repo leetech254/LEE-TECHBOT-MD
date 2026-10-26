@@ -48,9 +48,9 @@
 
 ### One-click Heroku deployment
 
-Use the **Deploy to Heroku** button above. Heroku reads `app.json`, creates the app automatically, installs Node.js dependencies, and starts exactly one `web` dyno. During setup, provide the required `OWNER_NUMBER`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, and `S3_SECRET_ACCESS_KEY` values. These S3-compatible credentials are required because Heroku dynos do not retain local files after replacement. Pair the bot at the new app URL followed by `/pairing`.
+Use the **Deploy to Heroku** button above. Heroku reads `app.json`, creates the app automatically, provisions the Bucketeer S3 add-on, installs Node.js dependencies, and starts exactly one `web` dyno. During setup, provide the required `OWNER_NUMBER`; Bucketeer automatically injects the S3 bucket and credentials into the app as `BUCKETEER_*` Config Vars. The bot detects those variables automatically. Bucketeer is a paid Heroku add-on, so review its current plan price before confirming deployment. Pair the bot at the new app URL followed by `/pairing`.
 
-AWS S3 users can leave `S3_ENDPOINT` blank. Cloudflare R2 users should set `S3_REGION=auto` and provide the account R2 endpoint. Use a unique `S3_PREFIX` for each deployed bot.
+AWS S3 or another S3-compatible provider can still be used manually by setting `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, and, when needed, `S3_ENDPOINT`. Cloudflare R2 users should set `S3_REGION=auto` and provide the account R2 endpoint. Use a unique `S3_PREFIX` for each deployed bot.
 
 ### Cross-host deployment
 

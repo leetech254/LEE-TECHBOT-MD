@@ -121,7 +121,7 @@ Inbound WhatsApp message IDs are now deduplicated for 24 hours by default. This 
 
 ## Heroku durable session storage
 
-Heroku dyno filesystems are ephemeral. The bot now supports an optional S3-compatible auth store so Baileys credentials are restored before startup and synchronized after credential updates. This is required if a Heroku dyno replacement must reconnect without pairing again.
+Heroku dyno filesystems are ephemeral. The bot now supports an optional S3-compatible auth store so Baileys credentials are restored before startup and synchronized after credential updates. This is required if a Heroku dyno replacement must reconnect without pairing again. The included `app.json` provisions the Bucketeer S3 add-on automatically and the bot recognizes Bucketeer’s `BUCKETEER_*` variables without manual mapping. Bucketeer is a paid Heroku add-on; use the manual variables below if you prefer your own AWS S3, R2, B2, or MinIO account.
 
 Create a private bucket in AWS S3, Cloudflare R2, Backblaze B2, or another S3-compatible provider. Set these Heroku Config Vars (never commit them):
 
