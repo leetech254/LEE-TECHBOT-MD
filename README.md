@@ -25,6 +25,7 @@
 |--------|------|
 | **Fork Repository** | <a href="https://github.com/networkserver06-commits/LEE-TECHBOT-MD/fork"><img src="https://img.shields.io/badge/Fork%20Repo-24292e?style=for-the-badge&logo=github&logoColor=white" alt="Fork repository"></a> |
 | **Download ZIP** | <a href="https://github.com/networkserver06-commits/LEE-TECHBOT-MD/archive/refs/heads/main.zip"><img src="https://img.shields.io/badge/Download-2ea043?style=for-the-badge&logo=github&logoColor=white" alt="Download ZIP"></a> |
+| **Deploy to Heroku** | <a href="https://heroku.com/deploy?template=https://github.com/leetech254/LEE-TECHBOT-MD"><img src="https://www.herokucdn.com/deploy/button.svg" alt="Deploy to Heroku"></a> |
 
 </div>
 
@@ -44,6 +45,12 @@
 > **Recommended start command:** `npm start`
 > **Node.js:** 20 or newer.
 > **Important:** Free hosts may sleep, restart, or delete storage. Keep the bot’s auth/session directory persistent and run one instance only.
+
+### One-click Heroku deployment
+
+Use the **Deploy to Heroku** button above. Heroku reads `app.json`, creates the app automatically, installs Node.js dependencies, and starts exactly one `web` dyno. During setup, provide the required `OWNER_NUMBER`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, and `S3_SECRET_ACCESS_KEY` values. These S3-compatible credentials are required because Heroku dynos do not retain local files after replacement. Pair the bot at the new app URL followed by `/pairing`.
+
+AWS S3 users can leave `S3_ENDPOINT` blank. Cloudflare R2 users should set `S3_REGION=auto` and provide the account R2 endpoint. Use a unique `S3_PREFIX` for each deployed bot.
 
 ### Cross-host deployment
 

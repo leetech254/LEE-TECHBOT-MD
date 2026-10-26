@@ -1,0 +1,80 @@
+{
+  "name": "lee-techbot-md",
+  "description": "LEE TECH WhatsApp automation bot with durable Heroku session storage",
+  "repository": "https://github.com/leetech254/LEE-TECHBOT-MD",
+  "logo": "https://raw.githubusercontent.com/leetech254/LEE-TECHBOT-MD/main/assets/bot_image.jpg",
+  "keywords": ["whatsapp", "baileys", "bot", "heroku"],
+  "stack": "heroku-24",
+  "buildpacks": [
+    {
+      "url": "heroku/nodejs"
+    }
+  ],
+  "env": {
+    "NODE_ENV": {
+      "value": "production",
+      "description": "Production runtime mode."
+    },
+    "BOT_MODE": {
+      "value": "private",
+      "description": "Bot access mode. Keep private until the owner configures the bot."
+    },
+    "PREFIX": {
+      "value": ".",
+      "description": "Command prefix."
+    },
+    "PAIRING_WEB_ENABLED": {
+      "value": "auto",
+      "description": "Serve the QR/pairing page automatically on the Heroku web URL."
+    },
+    "AUTH_DIR": {
+      "value": "/tmp/lee-techbot-auth",
+      "description": "Ephemeral local cache; the durable S3-compatible store is the source of truth on Heroku."
+    },
+    "AUTH_STORE": {
+      "value": "s3",
+      "description": "Enable durable S3-compatible WhatsApp auth storage."
+    },
+    "S3_BUCKET": {
+      "description": "Private bucket used to persist the WhatsApp auth session across dyno replacement.",
+      "required": true
+    },
+    "S3_REGION": {
+      "value": "us-east-1",
+      "description": "S3 region; use auto for Cloudflare R2."
+    },
+    "S3_PREFIX": {
+      "value": "lee-techbot/production/auth",
+      "description": "Private object prefix for this bot's session. Use a unique prefix per bot."
+    },
+    "S3_ENDPOINT": {
+      "description": "Optional S3-compatible endpoint. Leave empty for AWS S3; set the R2/B2/MinIO endpoint when applicable."
+    },
+    "S3_ACCESS_KEY_ID": {
+      "description": "Restricted S3-compatible access key with access only to the chosen auth prefix.",
+      "required": true
+    },
+    "S3_SECRET_ACCESS_KEY": {
+      "description": "Restricted S3-compatible secret key. Never commit or share this value.",
+      "required": true
+    },
+    "S3_FORCE_PATH_STYLE": {
+      "value": "false",
+      "description": "Set true only when the S3-compatible provider requires path-style requests."
+    },
+    "AUTH_STORE_DEBOUNCE_MS": {
+      "value": "2000",
+      "description": "Delay before coalesced auth updates are uploaded."
+    },
+    "OWNER_NUMBER": {
+      "description": "Owner WhatsApp number in international digits-only format, for example 254712345678.",
+      "required": true
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "eco"
+    }
+  }
+}
