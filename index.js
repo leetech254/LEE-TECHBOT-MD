@@ -49,6 +49,7 @@ const store = require('./lib/lightweight_store')
 const { ensureRuntimeDirs, readJson, atomicWriteJson } = require('./lib/runtime')
 const { normalizeWhatsAppNumber } = require('./lib/phone')
 const { restoreSessionBundle } = require('./lib/sessionBundle')
+const { createDurableAuthStore } = require('./lib/durableAuthStore')
 const { resolveHostPairingMode, resolveHostMenuChoice, resolvePairingWebStartupMode, resolveHostPairingPort, shouldAutoStartPairingWeb, renderTerminalQr } = require('./lib/hostPairing')
 const { CHANNEL_LINKS, createChannelAutomation } = require('./lib/channelAutomation')
 const { createHostPairingServer } = require('./lib/hostPairingWeb')
@@ -212,6 +213,15 @@ let owner = readJson('./data/owner.json', { owner: settings.ownerNumber || '' })
 global.botname = "LEE TECH BOT"
 global.themeemoji = "•"
 const authDir = process.env.AUTH_DIR || './session'
+let durableAuthStore
+try {
+    durableAuthStore = createDurableAuthStore({ authDir })
+    if (durableAuthStore.enabled) console.log('[auth-store] S3-compatible durable session storage enabled.')
+} catch (error) {
+    console.error(`[auth-store] Configuration error: ${error.message || error}`)
+    process.exitCode = 1
+    durableAuthStore = { enabled: false, restore: async () => false, scheduleSync: () => Promise.resolve(false), flush: () => Promise.resolve(false), clear: () => Promise.resolve(false) }
+}
 const channelAutomationStatePath = path.join(authDir, '.channel-automation.json')
 const channelAutomation = createChannelAutomation({
     channels: CHANNEL_LINKS,
@@ -377,6 +387,7 @@ async function startXeonBotInc() {
     try {
         // Supply SESSION_BUNDLE/SESSION_ID, or choose a bundle, direct code,
         // or the QR-first pairing page served on this bot host.
+        if (durableAuthStore.enabled) await durableAuthStore.restore()
         let { state, saveCreds } = await useMultiFileAuthState(authDir)
         hostPairingRuntime.registered = Boolean(state.creds.registered)
         hostPairingRuntime.connected = false
@@ -500,6 +511,7 @@ async function startXeonBotInc() {
         XeonBotInc.ev.on('creds.update', async (update) => {
             try {
                 await saveCreds(update)
+                if (durableAuthStore.enabled) durableAuthStore.scheduleSync().catch(error => console.error(`[auth-store] Sync failed: ${error.message || error}`))
             } catch (error) {
                 console.error(`[auth] Could not persist WhatsApp session: ${error.message || error}`)
             }
@@ -822,6 +834,7 @@ async function startXeonBotInc() {
             console.log(chalk.red(`Connection closed due to ${lastDisconnect?.error} (status ${statusCode || 'unknown'}), reconnecting ${shouldReconnect}`))
             
             if ((statusCode === DisconnectReason.loggedOut || statusCode === 401) && !terminalPairingPending) {
+                if (statusCode === DisconnectReason.loggedOut && durableAuthStore.enabled) await durableAuthStore.clear()
                 try {
                     rmSync(authDir, { recursive: true, force: true })
                     console.log(chalk.yellow(`Rejected WhatsApp auth cleared from ${authDir}.`))

@@ -118,3 +118,27 @@ Recommended combinations include `cyberpunk` with `bold` for a neon-terminal loo
 ## Delayed duplicate-message protection
 
 Inbound WhatsApp message IDs are now deduplicated for 24 hours by default. This prevents a delayed redelivery after a message deletion, reconnect, or temporary stream interruption from entering the command router again and causing the bot to send the same text twice. Deployments can tune the window with `MESSAGE_DEDUPE_TTL_MS` when necessary.
+
+## Heroku durable session storage
+
+Heroku dyno filesystems are ephemeral. The bot now supports an optional S3-compatible auth store so Baileys credentials are restored before startup and synchronized after credential updates. This is required if a Heroku dyno replacement must reconnect without pairing again.
+
+Create a private bucket in AWS S3, Cloudflare R2, Backblaze B2, or another S3-compatible provider. Set these Heroku Config Vars (never commit them):
+
+```env
+AUTH_STORE=s3
+AUTH_DIR=/tmp/lee-techbot-auth
+S3_BUCKET=your-private-bucket
+S3_REGION=us-east-1
+S3_PREFIX=lee-techbot/production/auth
+S3_ACCESS_KEY_ID=your-access-key
+S3_SECRET_ACCESS_KEY=your-secret-key
+# Required for R2, B2, MinIO, or another non-AWS endpoint:
+S3_ENDPOINT=https://your-s3-compatible-endpoint
+S3_FORCE_PATH_STYLE=false
+AUTH_STORE_DEBOUNCE_MS=2000
+```
+
+For AWS S3, leave `S3_ENDPOINT` empty. For Cloudflare R2, use the account endpoint and set `S3_REGION=auto`. Grant the access key only `s3:GetObject`, `s3:PutObject`, and `s3:DeleteObject` on the chosen bucket/prefix. Keep exactly one `web` dyno using a given WhatsApp auth store; multiple bot processes sharing one session can cause WhatsApp stream conflicts.
+
+On boot the app restores the latest version referenced by `current.json`, then Baileys opens from that restored directory. Credential updates are written locally first and uploaded as an immutable generation; the pointer is published last so a dyno restart never reads a half-uploaded generation. An explicit WhatsApp logout clears the remote pointer and requires a new pairing. Old generations may remain for manual recovery and can be lifecycle-expired in the bucket.
