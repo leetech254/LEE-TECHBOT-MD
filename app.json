@@ -76,7 +76,7 @@
     },
     "OWNER_NUMBER": {
       "description": "Owner WhatsApp number in international digits-only format, for example 254712345678.",
-      "required": true
+      "required": false
     }
   },
   "formation": {
