@@ -63,8 +63,9 @@
         <section class="method" id="code-method" hidden aria-labelledby="code-title">
           <div class="method-header"><div><h2 id="code-title">Phone-number pairing code</h2><p class="tiny">Use the full international number of the WhatsApp account you will link.</p></div></div>
           <label for="phone" class="tiny">WhatsApp number with country code</label>
-          <input class="field" id="phone" inputmode="numeric" autocomplete="tel" placeholder="254712345678" maxlength="15" aria-describedby="phone-help">
-          <p class="tiny" id="phone-help">Digits only is best. A leading +, spaces, and dashes are also normalized.</p>
+          <input class="field" id="phone" inputmode="tel" autocomplete="tel" placeholder="+254 712 345 678" maxlength="25" aria-describedby="phone-help">
+          <p class="tiny" id="phone-help">Enter the full international number. The bot removes +, spaces, brackets, and dashes before sending it to WhatsApp.</p>
+          <p class="tiny" id="phone-preview" aria-live="polite">Example: +254 712 345 678 → 254712345678</p>
           <button class="button full" id="get-code" type="button">Request pairing code</button>
           <div class="code" id="code" hidden aria-live="polite"></div>
           <button class="button secondary full" id="copy-code" type="button" hidden>Copy code</button>
@@ -125,9 +126,12 @@
     try { await api('/api/pairing/mode',{method:'POST',body:JSON.stringify({mode})}); markChoice(mode); if(mode==='code'){ $('code').hidden=true; $('copy-code').hidden=true; $('get-code').disabled=false; $('phone').focus(); } await refresh(); }
     catch(error){ message(error.message,'bad'); }
   }
+  function normalizePhone(value) { let digits=String(value||'').replace(/[\u00A0\u2000-\u200B]/g,'').replace(/[^0-9]/g,''); if(digits.startsWith('00')) digits=digits.slice(2); return /^[1-9][0-9]{9,14}$/.test(digits)?digits:''; }
+  function updatePhonePreview() { const raw=$('phone').value.trim(); if(!raw){$('phone-preview').textContent='Example: +254 712 345 678 → 254712345678';return;} const normalized=normalizePhone(raw); $('phone-preview').textContent=normalized?`Ready to send as ${normalized}`:'Include country code, for example +254 712 345 678'; }
+  $('phone').addEventListener('input', updatePhonePreview); $('phone').addEventListener('blur', () => { const normalized=normalizePhone($('phone').value); if(normalized) $('phone').value=`+${normalized}`; updatePhonePreview(); });
   $('choose-code').onclick=()=>selectMode('code'); $('choose-qr').onclick=()=>selectMode('qr');
   $('copy-code').onclick=async()=>{try{await navigator.clipboard.writeText($('code').textContent);message('Pairing code copied. Enter it in WhatsApp now.','good');}catch{message('Select and copy the code manually.','bad');}};
-  $('get-code').onclick=async()=>{const button=$('get-code');button.disabled=true;button.textContent='Requesting…';try{const result=await api('/api/pairing/code',{method:'POST',body:JSON.stringify({number:$('phone').value.trim()})});$('code').textContent=(result.code.match(/.{1,4}/g)||[result.code]).join('-');$('code').hidden=false;$('copy-code').hidden=false;message('Pairing code ready. Enter it in WhatsApp before it expires.','good');}catch(error){message(error.message,'bad');button.disabled=false;button.textContent='Request pairing code';}};
+  $('get-code').onclick=async()=>{const button=$('get-code');const normalized=normalizePhone($('phone').value);if(!normalized){message('Enter a valid international WhatsApp number with country code, for example +254 712 345 678.','bad');$('phone').focus();return;} $('phone').value=`+${normalized}`;updatePhonePreview();button.disabled=true;button.textContent='Requesting…';try{const result=await api('/api/pairing/code',{method:'POST',body:JSON.stringify({number:normalized})});$('code').textContent=(result.code.match(/.{1,4}/g)||[result.code]).join('-');$('code').hidden=false;$('copy-code').hidden=false;message('Pairing code ready. Enter it in WhatsApp before it expires.','good');}catch(error){message(error.message,'bad');button.disabled=false;button.textContent='Request pairing code';}};
   $('retry-button').onclick=async()=>{const button=$('retry-button');button.disabled=true;button.textContent='Starting…';try{await api('/api/pairing/retry',{method:'POST',body:'{}'});windowExpired=false;currentMode='';$('retry-panel').hidden=true;$('success').hidden=true;$('methods').classList.add('visible');if(!timer)timer=setInterval(refresh,2000);await refresh();}catch(error){message(error.message,'bad');}finally{button.disabled=false;button.textContent='Start a new pairing';}};
   refresh(); if(!windowExpired) timer=setInterval(refresh,2000);
 })();
