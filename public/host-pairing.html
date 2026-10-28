@@ -126,7 +126,7 @@
     try { await api('/api/pairing/mode',{method:'POST',body:JSON.stringify({mode})}); markChoice(mode); if(mode==='code'){ $('code').hidden=true; $('copy-code').hidden=true; $('get-code').disabled=false; $('phone').focus(); } await refresh(); }
     catch(error){ message(error.message,'bad'); }
   }
-  function normalizePhone(value) { let digits=String(value||'').replace(/[\u00A0\u2000-\u200B]/g,'').replace(/[^0-9]/g,''); if(digits.startsWith('00')) digits=digits.slice(2); return /^[1-9][0-9]{9,14}$/.test(digits)?digits:''; }
+  function normalizePhone(value) { const blocks=[[0x660,0x669],[0x6f0,0x6f9],[0x966,0x96f],[0x9e6,0x9ef],[0xa66,0xa6f],[0xae6,0xaef],[0xbe6,0xbef],[0xc66,0xc6f],[0xce6,0xcef],[0xd66,0xd6f],[0xe50,0xe59],[0xed0,0xed9],[0xff10,0xff19]]; let raw=String(value||'').replace(/[\u00A0\u2000-\u200B]/g,''); let digits=Array.from(raw,c=>{const n=c.codePointAt(0);const b=blocks.find(([a,z])=>n>=a&&n<=z);return b?String(n-b[0]):c;}).join('').replace(/[^0-9]/g,''); if(digits.startsWith('00'))digits=digits.slice(2); return /^[1-9][0-9]{7,14}$/.test(digits)?digits:''; }
   function updatePhonePreview() { const raw=$('phone').value.trim(); if(!raw){$('phone-preview').textContent='Example: +254 712 345 678 → 254712345678';return;} const normalized=normalizePhone(raw); $('phone-preview').textContent=normalized?`Ready to send as ${normalized}`:'Include country code, for example +254 712 345 678'; }
   $('phone').addEventListener('input', updatePhonePreview); $('phone').addEventListener('blur', () => { const normalized=normalizePhone($('phone').value); if(normalized) $('phone').value=`+${normalized}`; updatePhonePreview(); });
   $('choose-code').onclick=()=>selectMode('code'); $('choose-qr').onclick=()=>selectMode('qr');
