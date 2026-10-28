@@ -204,7 +204,7 @@ setInterval(() => {
     const used = process.memoryUsage().rss / 1024 / 1024
     if (used > 400) {
         console.log('⚠️ RAM too high (>400MB), restarting bot...')
-        process.exit(1) // Panel will auto-restart
+        void gracefulShutdown('memory-limit') // Panel will auto-restart
     }
 }, 30_000) // check every 30 seconds
 
@@ -214,13 +214,35 @@ global.botname = "LEE TECH BOT"
 global.themeemoji = "•"
 const authDir = process.env.AUTH_DIR || './session'
 let durableAuthStore
+let durableAuthStoreConfigError = null
 try {
     durableAuthStore = createDurableAuthStore({ authDir })
     if (durableAuthStore.enabled) console.log('[auth-store] S3-compatible durable session storage enabled.')
 } catch (error) {
     console.error(`[auth-store] Configuration error: ${error.message || error}`)
-    process.exitCode = 1
+    durableAuthStoreConfigError = error
     durableAuthStore = { enabled: false, restore: async () => false, scheduleSync: () => Promise.resolve(false), flush: () => Promise.resolve(false), clear: () => Promise.resolve(false) }
+}
+let shutdownInFlight = false
+let authPersistChain = Promise.resolve()
+async function gracefulShutdown(signal) {
+    if (shutdownInFlight) return
+    shutdownInFlight = true
+    global.__shutdownRequested = true
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer)
+        reconnectTimer = null
+    }
+    try { activeSocket?.ws?.close() } catch (_) {}
+    try {
+        await authPersistChain
+        if (durableAuthStore.enabled) await durableAuthStore.flush()
+        console.log(`[shutdown] ${signal}: durable auth flush complete.`)
+    } catch (error) {
+        console.error(`[shutdown] ${signal}: durable auth flush failed: ${error.message || error}`)
+    } finally {
+        process.exit(0)
+    }
 }
 const channelAutomationStatePath = path.join(authDir, '.channel-automation.json')
 const channelAutomation = createChannelAutomation({
@@ -382,9 +404,14 @@ function startHostPairingWebServer() {
 }
 
 async function startXeonBotInc() {
-    if (activeSocket || socketStartInFlight || global.__updateRestarting || terminalPairingStopped) return activeSocket
+    if (activeSocket || socketStartInFlight || global.__updateRestarting || global.__shutdownRequested || terminalPairingStopped) return activeSocket
     socketStartInFlight = true
     try {
+        if (durableAuthStoreConfigError) {
+            const error = new Error(`Durable auth storage is not configured correctly: ${durableAuthStoreConfigError.message || durableAuthStoreConfigError}`)
+            error.code = 'AUTH_STORE_CONFIG_INVALID'
+            throw error
+        }
         // Supply SESSION_BUNDLE/SESSION_ID, or choose a bundle, direct code,
         // or the QR-first pairing page served on this bot host.
         if (durableAuthStore.enabled) await durableAuthStore.restore()
@@ -509,12 +536,10 @@ async function startXeonBotInc() {
         // storage failure is visible without becoming an unhandled rejection
         // that can restart the bot after an otherwise successful pairing.
         XeonBotInc.ev.on('creds.update', async (update) => {
-            try {
+            authPersistChain = authPersistChain.then(async () => {
                 await saveCreds(update)
                 if (durableAuthStore.enabled) durableAuthStore.scheduleSync().catch(error => console.error(`[auth-store] Sync failed: ${error.message || error}`))
-            } catch (error) {
-                console.error(`[auth] Could not persist WhatsApp session: ${error.message || error}`)
-            }
+            }).catch(error => console.error(`[auth] Could not persist WhatsApp session: ${error.message || error}`))
         })
 
     store.bind(XeonBotInc.ev)
@@ -1004,18 +1029,20 @@ async function startXeonBotInc() {
             console.error(`[pairing-web] ${error.message} The bot will not retry this deterministic bind error in a loop.`)
             return
         }
-        if (error?.code === 'NO_SESSION_CONFIGURED' || error?.code === 'SESSION_INPUT_CLOSED' || error?.code === 'ERR_USE_AFTER_CLOSE' || error?.code === 'PAIRING_WEB_CONFIG_INVALID') {
+        if (error?.code === 'NO_SESSION_CONFIGURED' || error?.code === 'SESSION_INPUT_CLOSED' || error?.code === 'ERR_USE_AFTER_CLOSE' || error?.code === 'PAIRING_WEB_CONFIG_INVALID' || error?.code === 'AUTH_STORE_CONFIG_INVALID') {
             console.error(error.message)
             process.exit(1)
         }
         console.error('Error in startXeonBotInc:', error)
         await delay(Math.min(30000, 5000 * Math.max(1, reconnectAttempts)))
-        if (!activeSocket && !reconnectTimer && !global.__updateRestarting) startXeonBotInc()
+        if (!activeSocket && !reconnectTimer && !global.__updateRestarting && !global.__shutdownRequested) startXeonBotInc()
     }
 }
 
 
 // Start the bot with error handling
+process.once('SIGTERM', () => { void gracefulShutdown('SIGTERM') })
+process.once('SIGINT', () => { void gracefulShutdown('SIGINT') })
 startXeonBotInc().catch(error => {
     console.error('Fatal error:', error)
     process.exit(1)
