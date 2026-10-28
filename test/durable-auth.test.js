@@ -78,3 +78,28 @@ test('flush publishes the latest generation before shutdown', async () => {
   assert.ok(objects.has(pointer.manifestKey))
   fs.rmSync(authDir, { recursive: true, force: true })
 })
+
+
+test('transient object-storage failures are retried before publishing the pointer', async () => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lee-auth-'))
+  fs.writeFileSync(path.join(authDir, 'creds.json'), JSON.stringify({ registered: true }))
+  const objects = new Map()
+  const base = fakeS3(objects)
+  let failures = 2
+  const client = {
+    calls: base.calls,
+    async send(command) {
+      if (command.constructor.name === 'PutObjectCommand' && failures > 0) {
+        failures -= 1
+        throw new Error('temporary network failure')
+      }
+      return base.send(command)
+    }
+  }
+  const store = createDurableAuthStore({ authDir, client, env: { AUTH_STORE: 's3', S3_BUCKET: 'test', AUTH_STORE_RETRIES: '3' } })
+  store.scheduleSync()
+  await store.flush()
+  assert.equal(failures, 0)
+  assert.ok(objects.has('leetechbot/auth/current.json'))
+  fs.rmSync(authDir, { recursive: true, force: true })
+})

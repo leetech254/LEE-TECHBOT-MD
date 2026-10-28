@@ -418,6 +418,9 @@ async function startXeonBotInc() {
         let { state, saveCreds } = await useMultiFileAuthState(authDir)
         hostPairingRuntime.registered = Boolean(state.creds.registered)
         hostPairingRuntime.connected = false
+        if (durableAuthStore.enabled && state.creds.registered) {
+            durableAuthStore.scheduleSync().catch(error => console.error(`[auth-store] Startup backup failed: ${error.message || error}`))
+        }
         if (!pairingWebEnabled && !state.creds.registered && configuredHostPairingMode?.mode === 'invalid') {
             throw new Error('Invalid PHONE_NUMBER or PAIRING_NUMBER. Use 8–15 digits including the country code, for example 254712345678.')
         }
