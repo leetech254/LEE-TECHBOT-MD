@@ -221,7 +221,7 @@ try {
 } catch (error) {
     console.error(`[auth-store] Configuration error: ${error.message || error}`)
     durableAuthStoreConfigError = error
-    durableAuthStore = { enabled: false, restore: async () => false, scheduleSync: () => Promise.resolve(false), flush: () => Promise.resolve(false), clear: () => Promise.resolve(false) }
+    durableAuthStore = { enabled: false, verifyAccess: async () => false, restore: async () => false, scheduleSync: () => Promise.resolve(false), flush: () => Promise.resolve(false), clear: () => Promise.resolve(false) }
 }
 let shutdownInFlight = false
 let authPersistChain = Promise.resolve()
@@ -414,12 +414,15 @@ async function startXeonBotInc() {
         }
         // Supply SESSION_BUNDLE/SESSION_ID, or choose a bundle, direct code,
         // or the QR-first pairing page served on this bot host.
-        if (durableAuthStore.enabled) await durableAuthStore.restore()
+        if (durableAuthStore.enabled) {
+            await durableAuthStore.verifyAccess()
+            await durableAuthStore.restore()
+        }
         let { state, saveCreds } = await useMultiFileAuthState(authDir)
         hostPairingRuntime.registered = Boolean(state.creds.registered)
         hostPairingRuntime.connected = false
         if (durableAuthStore.enabled && state.creds.registered) {
-            durableAuthStore.scheduleSync().catch(error => console.error(`[auth-store] Startup backup failed: ${error.message || error}`))
+            await durableAuthStore.scheduleSync()
         }
         if (!pairingWebEnabled && !state.creds.registered && configuredHostPairingMode?.mode === 'invalid') {
             throw new Error('Invalid PHONE_NUMBER or PAIRING_NUMBER. Use 8–15 digits including the country code, for example 254712345678.')

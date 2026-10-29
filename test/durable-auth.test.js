@@ -103,3 +103,31 @@ test('transient object-storage failures are retried before publishing the pointe
   assert.ok(objects.has('leetechbot/auth/current.json'))
   fs.rmSync(authDir, { recursive: true, force: true })
 })
+
+test('Bucketeer variables enable durable storage and an empty bucket passes the access probe', async () => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lee-auth-'))
+  const store = createDurableAuthStore({
+    authDir,
+    client: fakeS3(new Map()),
+    env: {
+      AUTH_STORE: 's3',
+      BUCKETEER_BUCKET_NAME: 'bucket-from-addon',
+      BUCKETEER_AWS_REGION: 'eu-west-1',
+      BUCKETEER_AWS_ACCESS_KEY_ID: 'key',
+      BUCKETEER_AWS_SECRET_ACCESS_KEY: 'secret'
+    }
+  })
+  assert.equal(store.enabled, true)
+  assert.equal(await store.verifyAccess(), true)
+  fs.rmSync(authDir, { recursive: true, force: true })
+})
+
+test('durable access probe fails closed on permission errors', async () => {
+  const client = { async send() { const error = new Error('AccessDenied'); error.name = 'AccessDenied'; error.$metadata = { httpStatusCode: 403 }; throw error } }
+  const store = createDurableAuthStore({
+    authDir: fs.mkdtempSync(path.join(os.tmpdir(), 'lee-auth-')),
+    client,
+    env: { AUTH_STORE: 's3', S3_BUCKET: 'test' }
+  })
+  await assert.rejects(store.verifyAccess(), /S3\/Bucketeer access check failed: AccessDenied/)
+})
