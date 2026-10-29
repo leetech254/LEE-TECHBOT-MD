@@ -1,47 +1,96 @@
+'use strict';
+
+function escapeVcard(value) {
+    return String(value || 'Unknown')
+        .replace(/\\/g, '\\\\')
+        .replace(/\n/g, '\\n')
+        .replace(/;/g, '\\;')
+        .replace(/,/g, '\\,');
+}
+
+function digitsFromParticipant(participant) {
+    const raw = participant?.phoneNumber || participant?.id || participant?.jid || participant?.lid || '';
+    const digits = String(raw).split('@')[0].split(':')[0].replace(/\D/g, '');
+    return digits.length >= 7 ? digits : '';
+}
+
+function cleanFilePart(value, fallback = 'WhatsApp') {
+    const cleaned = String(value || '')
+        .replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/[. ]+$/g, '');
+    return (cleaned || fallback).slice(0, 80);
+}
+
+function participantName(participant, number, sock) {
+    const jid = participant?.id || participant?.jid || participant?.lid;
+    const stored = jid && (sock?.store?.contacts?.[jid] || sock?.contacts?.[jid]);
+    return String(
+        participant?.notify || participant?.name || participant?.vname || participant?.displayName ||
+        stored?.notify || stored?.name || stored?.vname || number
+    ).trim() || number;
+}
+
+function requesterName(message) {
+    return String(
+        message?.pushName || message?.key?.pushName || message?.senderName ||
+        message?.verifiedBizName || 'WhatsApp'
+    ).trim() || 'WhatsApp';
+}
+
+function buildVcard(participant, number, name) {
+    const safeName = escapeVcard(name);
+    return [
+        'BEGIN:VCARD',
+        'VERSION:3.0',
+        `FN:${safeName}`,
+        `N:${safeName};;;;`,
+        `TEL;TYPE=CELL,VOICE;waid=${number}:+${number}`,
+        'END:VCARD',
+        ''
+    ].join('\n');
+}
+
 const groupVcfCommand = async (sock, chatId, message, isGroup, isSenderAdmin, isOwnerOrSudoCheck) => {
-    // 1. Security Checks
     if (!isGroup) {
         return await sock.sendMessage(chatId, { text: '❌ This command can only be used in groups.' }, { quoted: message });
     }
-    
-    // Privacy feature: Only allow admins or the bot owner to mass-extract numbers
     if (!isSenderAdmin && !isOwnerOrSudoCheck) {
-        return await sock.sendMessage(chatId, { text: '❌ Only group admins or the bot owner can extract group contacts.' }, { quoted: message });
+        return await sock.sendMessage(chatId, { text: '❌ Only group admins or the bot owner can save group contacts.' }, { quoted: message });
     }
 
-    await sock.sendMessage(chatId, { text: '⏳ *Extracting contacts...* Please wait.' }, { quoted: message });
+    await sock.sendMessage(chatId, { text: '⏳ *Preparing named contacts...* Please wait.' }, { quoted: message });
 
     try {
-        // 2. Fetch all members
         const groupMetadata = await sock.groupMetadata(chatId);
-        const participants = groupMetadata.participants;
-        const groupName = groupMetadata.subject || 'WhatsApp Group';
+        const participants = Array.isArray(groupMetadata?.participants) ? groupMetadata.participants : [];
+        const contacts = participants.map((participant) => {
+            const number = digitsFromParticipant(participant);
+            if (!number) return null;
+            return { number, name: participantName(participant, number, sock), participant };
+        }).filter(Boolean);
 
-        // 3. Build the VCF string
-        let vcfString = '';
-        for (let participant of participants) {
-            const phoneNumber = participant.id.split('@')[0];
-            
-            vcfString += 'BEGIN:VCARD\n';
-            vcfString += 'VERSION:3.0\n';
-            // Saves them in your phone as "Group Name - 254123456789"
-            vcfString += `FN:${groupName} - ${phoneNumber}\n`; 
-            vcfString += `TEL;type=CELL;type=VOICE;waid=${phoneNumber}:+${phoneNumber}\n`;
-            vcfString += 'END:VCARD\n';
+        if (!contacts.length) {
+            return await sock.sendMessage(chatId, { text: '❌ No phone contacts were found in this group.' }, { quoted: message });
         }
 
-        // 4. Send as a downloadable document
-        await sock.sendMessage(chatId, {
-            document: Buffer.from(vcfString, 'utf-8'),
-            fileName: `${groupName}_Contacts.vcf`,
-            mimetype: 'text/vcard',
-            caption: `✅ Successfully extracted *${participants.length}* contacts from *${groupName}*.\n\n📥 Open this file to save them to your phone!`
-        }, { quoted: message });
+        const vcfString = contacts.map(({ participant, number, name }) => buildVcard(participant, number, name)).join('');
+        const fileName = `${cleanFilePart(requesterName(message))}_Contacts.vcf`;
+        const caption = `✅ Saved *${contacts.length}* contacts using each person’s WhatsApp name when available.\n\n📥 Open the VCF file to add them to your phone.`;
 
+        return await sock.sendMessage(chatId, {
+            document: Buffer.from(vcfString, 'utf8'),
+            fileName,
+            mimetype: 'text/vcard',
+            caption
+        }, { quoted: message });
     } catch (error) {
-        console.error("Error generating group VCF:", error);
-        await sock.sendMessage(chatId, { text: '❌ Failed to generate the contacts file. Ensure the bot is still in the group.' });
+        console.error('Error generating named group VCF:', error);
+        return await sock.sendMessage(chatId, { text: '❌ Failed to generate the VCF contacts file. Ensure the bot is still in the group.' }, { quoted: message });
     }
 };
 
 module.exports = groupVcfCommand;
+module.exports.buildVcard = buildVcard;
+module.exports.participantName = participantName;

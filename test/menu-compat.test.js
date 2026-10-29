@@ -184,13 +184,28 @@ test('invite uses the real group invite-link handler', async () => {
 
 test('savecontact uses the real group VCF handler', async () => {
     const sock = mockSock();
-    sock.groupMetadata = async () => ({ subject: 'Test Group', participants: [{ id: '254700000001@s.whatsapp.net' }] });
-    const handled = await menuCompatCommand(sock, '123@g.us', message, '.savecontact', {
+    sock.groupMetadata = async () => ({ subject: 'Test Group', participants: [{ id: '254700000001@s.whatsapp.net', notify: 'Alice Example' }] });
+    const namedMessage = { ...message, pushName: 'Brian Admin' };
+    const handled = await menuCompatCommand(sock, '123@g.us', namedMessage, '.savecontact', {
         isGroup: true, isSenderAdmin: true
     });
     assert.equal(handled, true);
     assert.equal(sock.sent.at(-1).payload.mimetype, 'text/vcard');
-    assert.match(sock.sent.at(-1).payload.fileName, /Test Group_Contacts\.vcf/);
+    assert.match(sock.sent.at(-1).payload.fileName, /Brian Admin_Contacts\.vcf/);
+    const vcf = sock.sent.at(-1).payload.document.toString('utf8');
+    assert.match(vcf, /FN:Alice Example/);
+    assert.doesNotMatch(vcf, /Test Group/);
+});
+
+test('vcf alias uses the same named group contact export', async () => {
+    const sock = mockSock();
+    sock.groupMetadata = async () => ({ subject: 'Another Group', participants: [{ id: '254700000002@s.whatsapp.net', name: 'Carol Name' }] });
+    const handled = await menuCompatCommand(sock, '123@g.us', { ...message, pushName: 'Derek' }, '.vcf', {
+        isGroup: true, isSenderAdmin: true
+    });
+    assert.equal(handled, true);
+    assert.equal(sock.sent.at(-1).payload.mimetype, 'text/vcard');
+    assert.match(sock.sent.at(-1).payload.document.toString('utf8'), /FN:Carol Name/);
 });
 
 test('local note and rate commands execute without an external provider', async () => {

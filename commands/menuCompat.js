@@ -108,7 +108,7 @@ const LEGACY_COMMANDS = new Set([
 const GROUP_COMMANDS = new Set([
     'addall', 'promoteall', 'demoteall', 'left', 'totag', 'gc', 'unwarn', 'all', 'antistatus',
     'approve', 'reject', 'group', 'gcalert', 'addmetaai', 'removemetaai', 'opentime', 'closetime',
-    'setdesc', 'setgrouppicture', 'editinfo', 'invite', 'revoke', 'savecontact', 'sendcontact',
+    'setdesc', 'setgrouppicture', 'editinfo', 'invite', 'revoke', 'savecontact', 'savecontacts', 'extract', 'vcf', 'vcard', 'sendcontact',
     'contacttag', 'tagadmin', 'getgrouppp', 'group-id', 'poll'
 ]);
 
@@ -448,7 +448,7 @@ async function menuCompatCommand(sock, chatId, message, input, context = {}) {
         await closeTimeCommand(sock, chatId, message, args, context);
         return true;
     }
-    if (command === 'savecontact' || command === 'savecontacts' || command === 'extract') {
+    if (command === 'savecontact' || command === 'savecontacts' || command === 'extract' || command === 'vcf' || command === 'vcard') {
         await groupVcfCommand(sock, chatId, message, Boolean(context.isGroup), Boolean(context.isSenderAdmin), Boolean(context.isOwnerOrSudoCheck));
         return true;
     }
