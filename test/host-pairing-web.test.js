@@ -161,6 +161,11 @@ test('host pairing code requests normalize the number and call the bot socket ca
 
 test('host pairing code remains available after a page refresh until it expires', async t => {
     const host = await withServer(t);
+    const page = await fetch(`${host.base}/pairing`);
+    const html = await page.text();
+    assert.match(html, /id="copy-code"[^>]*>Copy pairing code/);
+    assert.match(html, /id="code-hint"/);
+    assert.match(html, /replace\(\/-\/g,''\)/);
     host.setRuntime({ ready: true, qr: 'ready-qr' });
     await fetch(`${host.base}/api/pairing/mode`, {
         method: 'POST', headers: sameOrigin(host),
