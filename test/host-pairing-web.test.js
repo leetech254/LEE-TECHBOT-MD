@@ -52,6 +52,7 @@ function sameOrigin(host) {
 
 test('host pairing page starts with method selection and no QR generated', async t => {
     const host = await withServer(t);
+    host.setRuntime({ ready: true, qr: 'unselected-qr-value' });
     const page = await fetch(`${host.base}/pairing`);
     assert.equal(page.status, 200);
     const html = await page.text();
@@ -67,7 +68,7 @@ test('host pairing page starts with method selection and no QR generated', async
     assert.equal(response.status, 200);
     assert.equal(state.mode, '');
     assert.equal(state.qr, '');
-    assert.match(html, /no key or session bundle to copy/);
+    assert.match(html, /credentials are saved directly on this host/);
 });
 
 test('pairing controls reject cross-origin browser POSTs without a key', async t => {
