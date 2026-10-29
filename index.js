@@ -258,8 +258,8 @@ let sessionBundle = process.env.SESSION_BUNDLE || process.env.SESSION_ID || ''
 const pairingWebStartupMode = resolvePairingWebStartupMode(process.env.PAIRING_WEB_ENABLED)
 const autoPairAfterLogout = pairingWebStartupMode !== 'manual'
 let pairingWebEnabled = pairingWebStartupMode === 'always'
-const hostPairingRuntime = { connection: 'starting', ready: false, connected: false, registered: false, expired: false, qr: '', error: '', mode: pairingWebEnabled ? 'qr' : null }
-let hostWebPairingMode = pairingWebEnabled ? 'qr' : null
+const hostPairingRuntime = { connection: 'starting', ready: false, connected: false, registered: false, expired: false, qr: '', error: '', mode: null }
+let hostWebPairingMode = null
 let hostWebPairingCodeInFlight = false
 let hostPairingWebServer = null
 let pairingWebWindowTimer = null
@@ -324,7 +324,7 @@ function startHostPairingWebServer() {
     }
     const host = process.env.PAIRING_WEB_HOST || '0.0.0.0'
     const pairing = createHostPairingServer({
-        initialMode: hostWebPairingMode || 'qr',
+        initialMode: hostWebPairingMode || '',
         getRuntime: () => hostPairingRuntime,
         onMode: async (mode) => {
             hostWebPairingMode = mode
@@ -344,9 +344,9 @@ function startHostPairingWebServer() {
                 reconnectTimer = null
             }
             pairingWebEnabled = true
-            hostWebPairingMode = 'qr'
+            hostWebPairingMode = null
             hostPairing401Retries = 0
-            hostPairingRuntime.mode = 'qr'
+            hostPairingRuntime.mode = null
             hostPairingRuntime.connection = 'starting'
             hostPairingRuntime.ready = false
             hostPairingRuntime.connected = false
@@ -413,7 +413,7 @@ async function startXeonBotInc() {
             throw error
         }
         // Supply SESSION_BUNDLE/SESSION_ID, or choose a bundle, direct code,
-        // or the QR-first pairing page served on this bot host.
+        // or the method-selection pairing page served on this bot host.
         if (durableAuthStore.enabled) {
             await durableAuthStore.verifyAccess()
             await durableAuthStore.restore()
@@ -429,8 +429,8 @@ async function startXeonBotInc() {
         }
         if (pairingWebStartupMode === 'auto' && state.creds.registered && !terminalPairingNumber && !terminalQrMode && process.env.SESSION_TERMINAL_PROMPT !== 'true') {
             pairingWebEnabled = true
-            hostWebPairingMode = 'qr'
-            hostPairingRuntime.mode = 'qr'
+            hostWebPairingMode = null
+            hostPairingRuntime.mode = null
         }
         if (shouldAutoStartPairingWeb({
             startupMode: pairingWebStartupMode,
@@ -440,9 +440,9 @@ async function startXeonBotInc() {
             promptEnabled: process.env.SESSION_TERMINAL_PROMPT === 'true'
         })) {
             pairingWebEnabled = true
-            hostWebPairingMode = 'qr'
-            hostPairingRuntime.mode = 'qr'
-            console.log(chalk.green('[pairing-web] No saved session found; starting the QR-first pairing page automatically.'))
+            hostWebPairingMode = null
+            hostPairingRuntime.mode = null
+            console.log(chalk.green('[pairing-web] No saved session found; starting the pairing-method selection page automatically.'))
         }
         if (!state.creds.registered && !sessionBundle && !terminalPairingNumber && !terminalQrMode && !pairingWebEnabled) {
             const promptEnabled = process.env.SESSION_TERMINAL_PROMPT === 'true'
@@ -452,7 +452,7 @@ async function startXeonBotInc() {
                 error.code = 'NO_SESSION_CONFIGURED'
                 throw error
             }
-            const choice = String(await question(chalk.bgBlack(chalk.greenBright('Choose how to connect this bot:\n1. Paste SESSION_BUNDLE from the pairing website\n2. Pair directly on this host with a phone-number code\n3. Open this host\'s pairing website (QR first; code is also available)\nChoice [1/2/3]: ')))).trim()
+            const choice = String(await question(chalk.bgBlack(chalk.greenBright('Choose how to connect this bot:\n1. Paste SESSION_BUNDLE from the pairing website\n2. Pair directly on this host with a phone-number code\n3. Open this host\'s pairing website (choose QR or phone code)\nChoice [1/2/3]: ')))).trim()
             const hostChoice = resolveHostMenuChoice(choice)
             if (!hostChoice) throw new Error('Choose 1, 2, or 3 and restart the bot.')
             if (hostChoice === 'pair') {
@@ -466,8 +466,8 @@ async function startXeonBotInc() {
                 terminalQrMode = true
             } else if (hostChoice === 'web') {
                 pairingWebEnabled = true
-                hostWebPairingMode = 'qr'
-                hostPairingRuntime.mode = 'qr'
+                hostWebPairingMode = null
+                hostPairingRuntime.mode = null
             } else {
                 const pasted = await question(chalk.bgBlack(chalk.greenBright('Paste SESSION_BUNDLE (or SESSION_ID) and press Enter:\n')))
                 if (!String(pasted || '').trim()) {
@@ -874,19 +874,19 @@ async function startXeonBotInc() {
                 }
                 if (autoPairAfterLogout && !hostPairingRuntime.expired && !global.__updateRestarting) {
                     pairingWebEnabled = true
-                    hostWebPairingMode = 'qr'
+                    hostWebPairingMode = null
                     terminalPairingNumber = ''
                     terminalQrMode = false
                     terminalPairingStopped = false
                     hostWebPairingCodeInFlight = false
                     hostPairing401Retries = 0
-                    hostPairingRuntime.mode = 'qr'
+                    hostPairingRuntime.mode = null
                     hostPairingRuntime.connection = 'starting'
                     hostPairingRuntime.ready = false
                     hostPairingRuntime.connected = false
                     hostPairingRuntime.registered = false
                     hostPairingRuntime.qr = ''
-                    hostPairingRuntime.error = 'The saved WhatsApp session was rejected. Opening a fresh QR pairing flow automatically; no process restart is needed.'
+                    hostPairingRuntime.error = 'The saved WhatsApp session was rejected. Choose QR or phone-code pairing on the host page; no process restart is needed.'
                     try {
                         await startHostPairingWebServer()
                     } catch (error) {
@@ -894,7 +894,7 @@ async function startXeonBotInc() {
                         console.error('[pairing-web] Could not start the automatic re-pair page:', error.message || error)
                         return
                     }
-                    console.log(chalk.yellow('[pairing-web] Saved session was rejected; starting a fresh QR pairing session without restarting the bot process.'))
+                    console.log(chalk.yellow('[pairing-web] Saved session was rejected; opening a fresh pairing selection without restarting the bot process.'))
                     if (!reconnectTimer) {
                         reconnectTimer = setTimeout(async () => {
                             reconnectTimer = null

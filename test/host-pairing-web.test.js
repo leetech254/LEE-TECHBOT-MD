@@ -22,7 +22,7 @@ async function withServer(t, overrides = {}) {
         onMode: async mode => { runtime = { ...runtime, mode }; },
         onRetry: async () => {
             retryRequests.push(true);
-            runtime = { ...runtime, mode: 'qr', connection: 'starting', ready: false, connected: false, registered: false, expired: false, qr: '', error: '' };
+            runtime = { ...runtime, mode: '', connection: 'starting', ready: false, connected: false, registered: false, expired: false, qr: '', error: '' };
         },
         requestPairingCode: async phone => {
             requestedNumbers.push(phone);
@@ -50,7 +50,7 @@ function sameOrigin(host) {
     return { Origin: host.base, 'Content-Type': 'application/json' };
 }
 
-test('host pairing page and default QR status work without a key', async t => {
+test('host pairing page starts with method selection and no QR generated', async t => {
     const host = await withServer(t);
     const page = await fetch(`${host.base}/pairing`);
     assert.equal(page.status, 200);
@@ -61,10 +61,12 @@ test('host pairing page and default QR status work without a key', async t => {
     assert.match(html, /id="whatsapp-state"/);
     assert.match(html, /id="pairing-state"/);
     assert.match(html, /Waiting for the bot to finish reconnecting/);
+    assert.match(html, /Nothing is generated until you select a method/);
     const response = await fetch(`${host.base}/api/pairing/status`);
     const state = await response.json();
     assert.equal(response.status, 200);
-    assert.equal(state.mode, 'qr');
+    assert.equal(state.mode, '');
+    assert.equal(state.qr, '');
     assert.match(html, /no key or session bundle to copy/);
 });
 

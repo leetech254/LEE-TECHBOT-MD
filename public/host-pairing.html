@@ -102,7 +102,7 @@
   function updateSummary(data) {
     $('host-state').textContent='Online';
     $('whatsapp-state').textContent=data.connected?'Connected':data.registered?'Session saved':data.connection==='close'?'Reconnecting':data.ready?'Ready':'Connecting';
-    $('pairing-state').textContent=data.connected?'Complete':data.expired?'Expired':data.ready?`${data.mode==='code'?'Code':'QR'} ready`:'Waiting';
+      $('pairing-state').textContent=data.connected?'Complete':data.expired?'Expired':data.mode==='code'&&data.code?'Code ready':data.mode==='qr'&&data.ready?'QR ready':data.mode?'Preparing':'Choose a method';
     $('updated-state').textContent=new Date().toLocaleTimeString(); updateSteps(data);
   }
   async function refresh() {
@@ -114,7 +114,7 @@
       if (data.expired) { windowExpired=true; $('methods').classList.remove('visible'); $('retry-panel').hidden=false; message(data.error||'The pairing window expired. Start a new pairing here without restarting the bot.','bad'); clearInterval(timer); timer=null; return; }
       $('retry-panel').hidden=!(data.error&&!data.ready); $('methods').classList.add('visible');
       if (data.mode && data.mode!==currentMode) markChoice(data.mode);
-      if (data.error) message(data.error,'bad'); else if (!data.ready) message('Waiting for the bot-host WhatsApp connection. This page will keep checking automatically.'); else message(currentMode==='code'?'Connection ready. Request a code, then enter it in WhatsApp.':'Connection ready. Scan the QR code with WhatsApp.','good');
+      if (data.error) message(data.error,'bad'); else if (!currentMode) message('Choose QR scan or phone-number pairing code. Nothing is generated until you select a method.'); else if (!data.ready) message('Waiting for the bot-host WhatsApp connection. This page will keep checking automatically.'); else message(currentMode==='code'?'Connection ready. Request a code, then enter it in WhatsApp.':'Connection ready. Scan the QR code with WhatsApp.','good');
       if (currentMode==='qr'&&data.qr) { $('qr').src=data.qr; $('qr').hidden=false; $('qr-help').textContent='QR ready. It refreshes automatically when WhatsApp rotates it.'; }
       if (currentMode==='qr'&&!data.qr) { $('qr').hidden=true; $('qr-help').textContent='Waiting for the host to provide a fresh QR…'; }
       if (currentMode==='code'&&data.code) { $('code').textContent=(data.code.match(/.{1,4}/g)||[data.code]).join('-'); $('code').hidden=false; $('copy-code').hidden=false; $('get-code').disabled=true; $('get-code').textContent=`Code active · ${Math.max(0,Math.ceil((data.codeExpiresAt-Date.now())/1000))}s left`; }
