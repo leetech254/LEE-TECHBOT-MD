@@ -208,6 +208,23 @@ test('vcf alias uses the same named group contact export', async () => {
     assert.match(sock.sent.at(-1).payload.document.toString('utf8'), /FN:Carol Name/);
 });
 
+test('VCF prefers the user contact-book name for a group member', async () => {
+    const sock = mockSock();
+    sock.store = { contacts: {
+        '254700000003@s.whatsapp.net': { id: '254700000003@s.whatsapp.net', name: 'Saved Contact Name' }
+    } };
+    sock.groupMetadata = async () => ({ subject: 'Contacts Group', participants: [{
+        id: '254700000003@s.whatsapp.net', notify: 'WhatsApp Profile Name'
+    }] });
+    const handled = await menuCompatCommand(sock, '123@g.us', { ...message, pushName: 'Admin' }, '.savecontacts', {
+        isGroup: true, isSenderAdmin: true
+    });
+    assert.equal(handled, true);
+    const vcf = sock.sent.at(-1).payload.document.toString('utf8');
+    assert.match(vcf, /FN:Saved Contact Name/);
+    assert.doesNotMatch(vcf, /WhatsApp Profile Name/);
+});
+
 test('local note and rate commands execute without an external provider', async () => {
     const sock = mockSock();
     const ownerMessage = { key: { remoteJid: '123@s.whatsapp.net', fromMe: true }, message: { conversation: '.note test item' } };

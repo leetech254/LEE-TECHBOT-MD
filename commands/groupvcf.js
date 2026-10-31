@@ -1,5 +1,7 @@
 'use strict';
 
+const localContactStore = require('../lib/lightweight_store');
+
 function escapeVcard(value) {
     return String(value || 'Unknown')
         .replace(/\\/g, '\\\\')
@@ -24,11 +26,18 @@ function cleanFilePart(value, fallback = 'WhatsApp') {
 }
 
 function participantName(participant, number, sock) {
-    const jid = participant?.id || participant?.jid || participant?.lid;
-    const stored = jid && (sock?.store?.contacts?.[jid] || sock?.contacts?.[jid]);
+    const jids = [participant?.id, participant?.jid, participant?.lid]
+        .filter(Boolean)
+        .map(String);
+    const numberJid = number ? `${number}@s.whatsapp.net` : '';
+    const storedContacts = [sock?.store?.contacts, sock?.contacts, localContactStore?.contacts].filter(Boolean);
+    const stored = storedContacts
+        .map((contacts) => jids.map((jid) => contacts[jid]).concat(numberJid ? contacts[numberJid] : []))
+        .flat()
+        .find((contact) => contact?.name || contact?.notify || contact?.vname || contact?.displayName);
     return String(
-        participant?.notify || participant?.name || participant?.vname || participant?.displayName ||
-        stored?.notify || stored?.name || stored?.vname || number
+        stored?.name || stored?.notify || stored?.vname || stored?.displayName ||
+        participant?.notify || participant?.name || participant?.vname || participant?.displayName || number
     ).trim() || number;
 }
 
