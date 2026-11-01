@@ -54,6 +54,7 @@ const { tagAllCommand, contactTagCommand, tagAdminsCommand } = require('./groupT
 const studentTools = require('./studentTools');
 const { whoisCommand, pingHostCommand, dnsCommand, scholarCommand, mathCommand, pdfCommand } = require('./academicTools');
 const { designCommand } = require('./design');
+const { buildFeatureStatus } = require('./help');
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const NOTES_FILE = path.join(DATA_DIR, 'menuNotes.json');
@@ -230,6 +231,11 @@ async function menuCompatCommand(sock, chatId, message, input, context = {}) {
     const command = (parts.shift() || '').replace(/^[./]/, '').toLowerCase();
     const args = parts;
     if (!command) return false;
+
+    if (command === 'features' || command === 'featurestatus') {
+        await reply(sock, chatId, message, buildFeatureStatus({ chatId, message, isGroup: Boolean(context.isGroup) }));
+        return true;
+    }
 
     if (['create', 'logo', 'design', 'imagine'].includes(command)) {
         const promptArgs = command === 'logo' ? ['logo', ...args] : args;

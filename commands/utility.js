@@ -31,6 +31,7 @@ async function speedCommand(sock, chatId, message) {
     const started = Date.now();
     const sent = await sock.sendMessage(chatId, { text: '⚡ Measuring response speed…' }, { quoted: message });
     const latency = Date.now() - started;
+    global.lastCommandLatencyMs = latency;
     return sock.sendMessage(chatId, { text: `╭─〔 ⚡ SPEED TEST 〕\n│ Response: *${latency} ms*\n│ Status: *ONLINE* ✅\n╰──────────────` }, { quoted: sent });
 }
 

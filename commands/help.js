@@ -76,10 +76,16 @@ function formatUptime(seconds) {
 }
 
 function platformName() {
+    const explicit = process.env.PLATFORM_NAME || process.env.HOSTING_PLATFORM || process.env.DEPLOYMENT_PROVIDER;
+    if (explicit) return String(explicit).trim();
+    if (process.env.LEETEC_HOSTING || process.env.LEE_TECH_HOSTING || process.env.LEETEC_APP_ID || process.env.LEETEC_DEPLOYMENT) return 'Lee Tech Hosting';
     if (process.env.DYNO || process.env.HEROKU_APP_NAME) return 'Heroku';
     if (process.env.RENDER) return 'Render';
     if (process.env.RAILWAY_ENVIRONMENT) return 'Railway';
     if (process.env.KOYEB_APP_ID) return 'Koyeb';
+    if (process.env.VERCEL || process.env.VERCEL_ENV) return 'Vercel';
+    if (process.env.PTERODACTYL_SERVER_UUID || process.env.P_SERVER_UUID || process.env.PANEL || process.env.KATARO_HOST) return 'Panel';
+    if (process.env.SERVER_PORT && (process.env.HOME || '').includes('/home/container')) return 'Panel';
     return process.env.PLATFORM_NAME || 'Node.js host';
 }
 
@@ -201,20 +207,6 @@ function buildCatalogMenu(context = {}) {
         `┃✧ *RAM:* ${live.memory}`,
         `┃✧ *SESSION:* 🔒 ${live.session}`,
         `┃✧ *COMMANDS:* ${allCommands().length}`,
-        `┗━━━━━━━━━━━━━━━━━━`,
-        ``,
-        `┏━━━✧ *FEATURES* ✧━━━`,
-        `┃✧ *AUTOREAD:* ${live.features.autoread ? 'ON' : 'OFF'}  *AUTOTYPING:* ${live.features.autotyping ? 'ON' : 'OFF'}`,
-        `┃✧ *AUTOSTATUS:* ${live.features.autostatus ? 'ON' : 'OFF'}  *ANTICALL:* ${live.features.anticall ? 'ON' : 'OFF'}`,
-        `┃✧ *PMBLOCKER:* ${live.features.pmblocker ? 'ON' : 'OFF'}  *AUTODL:* ${live.features.autodl ? 'ON' : 'OFF'}`,
-        `┃✧ *ANTISPAM:* ${live.features.antispam ? 'ON' : 'OFF'}  *MAINTENANCE:* ${live.features.maintenance ? 'ON' : 'OFF'}`,
-        ...(live.group ? [
-            `┃✧ *CHATBOT:* ${live.features.chatbot ? 'ON' : 'OFF'}  *ANTILINK:* ${live.features.antilink ? 'ON' : 'OFF'}`,
-            `┃✧ *WELCOME:* ${live.features.welcome ? 'ON' : 'OFF'}  *AUTOREACTION:* ${live.features.autoreaction ? 'ON' : 'OFF'}`,
-            `┃✧ *ANTISTICKER:* ${live.features.antisticker ? 'ON' : 'OFF'}  *ANTIPHOTO:* ${live.features.antiphoto ? 'ON' : 'OFF'}`,
-            `┃✧ *ANTIVIEWONCE:* ${live.features.antiviewonce ? 'ON' : 'OFF'}  *ANTIFAKE:* ${live.features.antifake ? 'ON' : 'OFF'}`,
-            `┃✧ *ANTIBOT:* ${live.features.antibot ? 'ON' : 'OFF'}  *HIDECHANNEL:* ${live.features.hidechannel ? 'ON' : 'OFF'}`
-        ] : []),
         `┗━━━━━━━━━━━━━━━━━━`
     ];
     for (const category of MENU_CATEGORIES) {
@@ -225,6 +217,46 @@ function buildCatalogMenu(context = {}) {
         lines.push('┗━━━━━━━━━━━━━━━❍');
     }
     lines.push('', `┏━━━━━━━━━━━━━━━❍`, `┃ *MENU CONTROLS*`, `┃ ${p}menustyle premium|neon|cyberpunk|minimal|terminal|royal`, `┃ ${p}menufont clean|bold|double|mono`, `┃ ${p}menumode image|text|status`, `┃ *POWERED BY LEE TECH*`, `┃ *OWNER: LEETECH*`, `┃ Use *${p}menu <category>* for a focused menu`, `┃ Use *${p}help <command>* for command guidance`, `┗━━━━━━━━━━━━━━━❍`);
+    return lines.join('\n');
+}
+
+function buildFeatureStatus(context = {}) {
+    const p = prefix();
+    const live = liveMenuState(context);
+    const state = value => value ? 'ON ✅' : 'OFF ⭕';
+    const lines = [
+        `┏━━━✧ *FEATURE SETTINGS* ✧━━━`,
+        `┃ Scope: *${live.group ? 'GLOBAL + GROUP' : 'GLOBAL'}*`,
+        `┃`,
+        `┃ *GLOBAL FEATURES*`,
+        `┃ *AUTOREAD:* ${state(live.features.autoread)}`,
+        `┃ *AUTOTYPING:* ${state(live.features.autotyping)}`,
+        `┃ *AUTOSTATUS:* ${state(live.features.autostatus)}`,
+        `┃ *ANTICALL:* ${state(live.features.anticall)}`,
+        `┃ *PMBLOCKER:* ${state(live.features.pmblocker)}`,
+        `┃ *AUTODL:* ${state(live.features.autodl)}`,
+        `┃ *ANTISPAM:* ${state(live.features.antispam)}`,
+        `┃ *MAINTENANCE:* ${state(live.features.maintenance)}`
+    ];
+    if (live.group) {
+        lines.push(
+            `┃`,
+            `┃ *GROUP FEATURES*`,
+            `┃ *CHATBOT:* ${state(live.features.chatbot)}`,
+            `┃ *ANTILINK:* ${state(live.features.antilink)}`,
+            `┃ *WELCOME:* ${state(live.features.welcome)}`,
+            `┃ *AUTOREACTION:* ${state(live.features.autoreaction)}`,
+            `┃ *ANTISTICKER:* ${state(live.features.antisticker)}`,
+            `┃ *ANTIPHOTO:* ${state(live.features.antiphoto)}`,
+            `┃ *ANTIVIEWONCE:* ${state(live.features.antiviewonce)}`,
+            `┃ *ANTIFAKE:* ${state(live.features.antifake)}`,
+            `┃ *ANTIBOT:* ${state(live.features.antibot)}`,
+            `┃ *HIDECHANNEL:* ${state(live.features.hidechannel)}`
+        );
+    } else {
+        lines.push(`┃`, `┃ Group features: use *${p}features* inside a group to inspect them.`);
+    }
+    lines.push(`┗━━━━━━━━━━━━━━━━━━━━━━━━`, `Use *${p}menu* for runtime status and command categories.`);
     return lines.join('\n');
 }
 
@@ -340,5 +372,6 @@ async function helpCommand(sock, chatId, message) {
 
 module.exports = helpCommand;
 module.exports.buildMenu = buildMenu;
+module.exports.buildFeatureStatus = buildFeatureStatus;
 module.exports.buildDeveloperMenu = buildDeveloperMenu;
 module.exports.developerButtons = developerButtons;

@@ -60,8 +60,11 @@ test('menu renders live user, mode, speed, and feature status fields', () => {
     assert.match(menu, /USER:\* 254700000000/);
     assert.match(menu, /MODE:\* (Public|Private)/);
     assert.match(menu, /SPEED:\* \d+\.\d{4}ms/);
-    assert.match(menu, /AUTOREAD:\* (ON|OFF)/);
-    assert.match(menu, /AUTOSTATUS:\* (ON|OFF)/);
+    assert.doesNotMatch(menu, /AUTOREAD:\* (ON|OFF)/);
+    assert.doesNotMatch(menu, /AUTOSTATUS:\* (ON|OFF)/);
+    const featureStatus = help.buildFeatureStatus({ chatId: '254700000000@s.whatsapp.net', message: { key: { remoteJid: '254700000000@s.whatsapp.net' } } });
+    assert.match(featureStatus, /AUTOREAD:\* (ON|OFF)/);
+    assert.match(featureStatus, /AUTOSTATUS:\* (ON|OFF)/);
 });
 
 test('menu prefers linked WhatsApp name while retaining linked number', () => {
@@ -79,6 +82,36 @@ test('menu omits the number when only a long WhatsApp LID is available', () => {
         message: { key: { remoteJid: '174719890415834@s.whatsapp.net' } }
     });
     assert.doesNotMatch(menu, /NUMBER:\* 174719890415834/);
+});
+
+test('main menu keeps feature toggles out of the runtime header', () => {
+    const menu = help.buildMenu();
+    assert.doesNotMatch(menu, /FEATURE SETTINGS/);
+    assert.match(menu, /Features/);
+    assert.match(help.buildFeatureStatus({ chatId: '123@g.us', message: { key: { remoteJid: '123@g.us' } } }), /FEATURE SETTINGS/);
+    assert.match(help.buildFeatureStatus({ chatId: '123@g.us', message: { key: { remoteJid: '123@g.us' } } }), /ANTILINK:/);
+});
+
+test('menu detects supported hosting providers from environment signals', () => {
+    const keys = ['LEETEC_HOSTING', 'DYNO', 'PTERODACTYL_SERVER_UUID'];
+    const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+    try {
+        delete process.env.DYNO;
+        delete process.env.PTERODACTYL_SERVER_UUID;
+        process.env.LEETEC_HOSTING = 'true';
+        assert.match(help.buildMenu(), /PLATFORM:\* ☁️ Lee Tech Hosting/);
+        delete process.env.LEETEC_HOSTING;
+        process.env.DYNO = 'web.1';
+        assert.match(help.buildMenu(), /PLATFORM:\* ☁️ Heroku/);
+        delete process.env.DYNO;
+        process.env.PTERODACTYL_SERVER_UUID = 'server';
+        assert.match(help.buildMenu(), /PLATFORM:\* ☁️ Panel/);
+    } finally {
+        for (const key of keys) {
+            if (previous[key] === undefined) delete process.env[key];
+            else process.env[key] = previous[key];
+        }
+    }
 });
 
 test('bot information reports the live catalog command count', async () => {
