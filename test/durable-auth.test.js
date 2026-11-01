@@ -104,6 +104,35 @@ test('transient object-storage failures are retried before publishing the pointe
   fs.rmSync(authDir, { recursive: true, force: true })
 })
 
+test('a failed sync schedules a later backup automatically', async () => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lee-auth-'))
+  fs.writeFileSync(path.join(authDir, 'creds.json'), JSON.stringify({ registered: true }))
+  const objects = new Map()
+  const base = fakeS3(objects)
+  let failures = 1
+  const client = {
+    calls: base.calls,
+    async send(command) {
+      if (command.constructor.name === 'PutObjectCommand' && failures > 0) {
+        failures -= 1
+        throw new Error('temporary outage')
+      }
+      return base.send(command)
+    }
+  }
+  const store = createDurableAuthStore({
+    authDir,
+    client,
+    env: { AUTH_STORE: 's3', S3_BUCKET: 'test', AUTH_STORE_RETRIES: '1', AUTH_STORE_RETRY_DELAY_MS: '50' }
+  })
+  store.scheduleSync()
+  await new Promise(resolve => setTimeout(resolve, 180))
+  assert.equal(failures, 0)
+  assert.ok(objects.has('leetechbot/auth/current.json'))
+  await store.flush()
+  fs.rmSync(authDir, { recursive: true, force: true })
+})
+
 test('Bucketeer variables enable durable storage and an empty bucket passes the access probe', async () => {
   const authDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lee-auth-'))
   const store = createDurableAuthStore({
