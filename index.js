@@ -220,10 +220,13 @@ let durableAuthStoreConfigError = null
 try {
     durableAuthStore = createDurableAuthStore({ authDir })
     if (durableAuthStore.enabled) console.log('[auth-store] S3-compatible durable session storage enabled.')
+    else if (process.env.DYNO || process.env.HEROKU_APP_NAME || process.env.PORT || process.env.P_SERVER_UUID || process.env.PTERODACTYL_SERVER_UUID) {
+        console.warn('[auth-store] Durable session storage is not configured on this deployment. Provision Bucketeer or set AUTH_STORE=s3 with S3_BUCKET and credentials before pairing.')
+    }
 } catch (error) {
     console.error(`[auth-store] Configuration error: ${error.message || error}`)
     durableAuthStoreConfigError = error
-    durableAuthStore = { enabled: false, verifyAccess: async () => false, restore: async () => false, scheduleSync: () => Promise.resolve(false), flush: () => Promise.resolve(false), clear: () => Promise.resolve(false), status: () => ({ enabled: false, healthy: false, lastSyncAt: null, lastSyncFiles: 0, generation: null, retrying: false, error: error.message || String(error) }) }
+    durableAuthStore = { enabled: false, verifyAccess: async () => false, restore: async () => false, scheduleSync: () => Promise.resolve(false), flush: () => Promise.resolve(false), clear: () => Promise.resolve(false), status: () => ({ enabled: false, healthy: false, configured: false, lastSyncAt: null, lastSyncFiles: 0, generation: null, retrying: false, error: error.message || String(error) }) }
 }
 global.durableAuthStore = durableAuthStore
 let shutdownInFlight = false
@@ -782,7 +785,7 @@ async function startXeonBotInc() {
                             `┃ Time: ${new Date().toLocaleString()}\n` +
                             `┃ Version: *${settings.version}*\n` +
                             `┃ Session: *${authStatus.enabled ? 'Durable backup enabled' : 'Local storage only'}*\n` +
-                            `┃ Backup: *${authStatus.lastSyncAt ? 'Saved' : authStatus.enabled ? 'Starting' : 'Not configured'}*\n\n` +
+                            `┃ Backup: *${authStatus.lastSyncAt ? 'Saved' : authStatus.enabled ? 'Starting' : authStatus.reason ? 'Not configured: add Bucketeer' : 'Not configured'}*\n\n` +
                             `Use *.menu* for commands and *.ping* to check response speed.`,
                     });
                     fs.mkdirSync(path.dirname(connectionNoticePath), { recursive: true })

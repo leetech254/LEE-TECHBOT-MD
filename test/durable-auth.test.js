@@ -151,6 +151,32 @@ test('Bucketeer variables enable durable storage and an empty bucket passes the 
   fs.rmSync(authDir, { recursive: true, force: true })
 })
 
+test('alternate Bucketeer variable names enable durable storage', () => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lee-auth-'))
+  const store = createDurableAuthStore({
+    authDir,
+    client: fakeS3(new Map()),
+    env: {
+      BUCKETEER_S3_BUCKET: 'bucket-from-host',
+      BUCKETEER_REGION: 'eu-west-1',
+      BUCKETEER_ACCESS_KEY_ID: 'key',
+      BUCKETEER_SECRET_ACCESS_KEY: 'secret'
+    }
+  })
+  assert.equal(store.enabled, true)
+  fs.rmSync(authDir, { recursive: true, force: true })
+})
+
+test('missing durable configuration reports an explicit reason', () => {
+  const store = createDurableAuthStore({ env: {} })
+  assert.deepEqual(store.status(), {
+    enabled: false,
+    healthy: false,
+    configured: false,
+    reason: 'missing S3_BUCKET or Bucketeer bucket config var'
+  })
+})
+
 test('durable access probe fails closed on permission errors', async () => {
   const client = { async send() { const error = new Error('AccessDenied'); error.name = 'AccessDenied'; error.$metadata = { httpStatusCode: 403 }; throw error } }
   const store = createDurableAuthStore({
