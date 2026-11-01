@@ -290,6 +290,18 @@ async function updateViaZip(zipOverride) {
 
 async function restartProcess(sock) {
     global.__updateRestarting = true;
+    // Credential updates are debounced. Never replace the process until the
+    // local write queue and the durable S3/Bucketeer snapshot have completed.
+    // If the remote backup fails, abort the restart so an ephemeral host does
+    // not discard the only current copy of the WhatsApp session.
+    if (typeof global.__flushDurableAuthBeforeRestart === 'function') {
+        try {
+            await global.__flushDurableAuthBeforeRestart();
+        } catch (error) {
+            global.__updateRestarting = false;
+            throw error;
+        }
+    }
     // Do not call ws.close() here. Even a clean WebSocket close can emit a
     // Baileys connection-terminated event and start the reconnect loop while
     // the update process is being replaced. The supervisor will terminate
@@ -365,6 +377,7 @@ module.exports.downloadFile = downloadFile;
 module.exports.updateViaGit = updateViaGit;
 module.exports.updateViaZip = updateViaZip;
 module.exports.writeRestartNotice = writeRestartNotice;
+module.exports.restartProcess = restartProcess;
 module.exports.copyRecursive = copyRecursive;
 module.exports.assertInside = assertInside;
 module.exports.usesManagedProcessSupervisor = usesManagedProcessSupervisor;

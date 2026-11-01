@@ -19,6 +19,22 @@ test('updater exposes safe helper APIs', () => {
     assert.equal(typeof updater.updateViaZip, 'function');
     assert.equal(typeof updater.writeRestartNotice, 'function');
     assert.equal(typeof updater.usesManagedProcessSupervisor, 'function');
+    assert.equal(typeof updater.restartProcess, 'function');
+});
+
+test('update restart aborts safely when the session backup barrier fails', async () => {
+    const previousBarrier = global.__flushDurableAuthBeforeRestart;
+    const previousRestarting = global.__updateRestarting;
+    global.__flushDurableAuthBeforeRestart = async () => { throw new Error('Bucketeer unavailable'); };
+    try {
+        await assert.rejects(updater.restartProcess(), /Bucketeer unavailable/);
+        assert.equal(global.__updateRestarting, false);
+    } finally {
+        if (previousBarrier) global.__flushDurableAuthBeforeRestart = previousBarrier;
+        else delete global.__flushDurableAuthBeforeRestart;
+        if (previousRestarting === undefined) delete global.__updateRestarting;
+        else global.__updateRestarting = previousRestarting;
+    }
 });
 
 test('host restart detection uses the platform supervisor instead of starting a competing child', () => {

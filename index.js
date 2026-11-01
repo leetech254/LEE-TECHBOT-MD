@@ -228,6 +228,16 @@ try {
 global.durableAuthStore = durableAuthStore
 let shutdownInFlight = false
 let authPersistChain = Promise.resolve()
+global.__flushDurableAuthBeforeRestart = async () => {
+    await authPersistChain
+    if (!durableAuthStore.enabled) return true
+    const flushed = await durableAuthStore.flush()
+    const status = durableAuthStore.status?.() || {}
+    if (flushed === false && status.error) {
+        throw new Error(`Durable auth backup failed: ${status.error}`)
+    }
+    return flushed !== false
+}
 async function gracefulShutdown(signal) {
     if (shutdownInFlight) return
     shutdownInFlight = true
@@ -238,8 +248,7 @@ async function gracefulShutdown(signal) {
     }
     try { activeSocket?.ws?.close() } catch (_) {}
     try {
-        await authPersistChain
-        if (durableAuthStore.enabled) await durableAuthStore.flush()
+        await global.__flushDurableAuthBeforeRestart()
         console.log(`[shutdown] ${signal}: durable auth flush complete.`)
     } catch (error) {
         console.error(`[shutdown] ${signal}: durable auth flush failed: ${error.message || error}`)
