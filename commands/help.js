@@ -65,6 +65,24 @@ function prefix() {
     return global.prefix === 'none' ? '.' : (global.prefix || '.');
 }
 
+function formatUptime(seconds) {
+    const total = Math.max(0, Math.floor(Number(seconds) || 0));
+    const days = Math.floor(total / 86400);
+    const hours = Math.floor((total % 86400) / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const secs = total % 60;
+    return [days ? `${days}d` : '', hours ? `${hours}h` : '', minutes ? `${minutes}m` : '', `${secs}s`]
+        .filter(Boolean).join(' ');
+}
+
+function platformName() {
+    if (process.env.DYNO || process.env.HEROKU_APP_NAME) return 'Heroku';
+    if (process.env.RENDER) return 'Render';
+    if (process.env.RAILWAY_ENVIRONMENT) return 'Railway';
+    if (process.env.KOYEB_APP_ID) return 'Koyeb';
+    return process.env.PLATFORM_NAME || 'Node.js host';
+}
+
 function readState(fileName, fallback = {}) {
     try {
         return JSON.parse(fs.readFileSync(path.join(process.cwd(), 'data', fileName), 'utf8'));
@@ -103,6 +121,11 @@ function liveMenuState(context = {}) {
         userNumber: configuredNumber || (senderNumber.length < 15 ? senderNumber : ''),
         mode: (() => { const value = String(mode.mode || (mode.isPublic === false ? 'private' : 'public')); return value.charAt(0).toUpperCase() + value.slice(1); })(),
         speed: Number(health.lastLatencyMs || global.lastCommandLatencyMs || 0).toFixed(4),
+        uptime: formatUptime(process.uptime()),
+        platform: platformName(),
+        memory: `${Math.round(process.memoryUsage().rss / 1024 / 1024)} MB`,
+        session: (String(process.env.AUTH_STORE || '').toLowerCase() === 's3' || process.env.BUCKETEER_BUCKET_NAME)
+            ? 'Durable backup enabled' : 'Local storage only',
         group,
         features: {
             autoread: enabled(autoread),
@@ -162,34 +185,37 @@ function buildCatalogMenu(context = {}) {
     const privacy = live.mode;
     const owner = live.user || settings.botOwner || 'LEETECH';
     const lines = [
-        `┏━━━━━━━━━━━━━━━━❍`,
-        `┃ *${stylizeHeading(name.toUpperCase(), config.font)} MENU*`,
-        `┗━━━━━━━━━━━━━━━❍`,
-        `┏━━━━━━━━━━━━━━━❍`,
-        `┣❍ *BOT INFORMATION:*`,
-        `┣❍ *USER:* ${live.user}`,
-        ...(live.userNumber ? [`┣❍ *NUMBER:* ${live.userNumber}`] : []),
-        `┣❍ *VERSION:* v${version}`,
-        `┣❍ *COMMANDS:* ${allCommands().length}`,
-        `┣❍ *MENU:* ${config.style || 'premium'} / ${config.font || 'clean'}`,
-        `┣❍ *MENU CONTROLS:* ${p}menustyle • ${p}menufont • ${p}menumode`,
-        `┣❍ *MODE:* ${privacy}`,
-        `┣❍ *PREFIX:* [ ${p} ]`,
-        `┣❍ *OWNER:* ${owner}`,
-        `┣❍ *SPEED:* ${live.speed}ms`,
-        `┣❍ *FEATURES:* ${live.group ? 'GROUP + GLOBAL' : 'GLOBAL'}`,
-        `┣❍ *AUTOREAD:* ${live.features.autoread ? 'ON' : 'OFF'}  *AUTOTYPING:* ${live.features.autotyping ? 'ON' : 'OFF'}`,
-        `┣❍ *AUTOSTATUS:* ${live.features.autostatus ? 'ON' : 'OFF'}  *ANTICALL:* ${live.features.anticall ? 'ON' : 'OFF'}`,
-        `┣❍ *PMBLOCKER:* ${live.features.pmblocker ? 'ON' : 'OFF'}  *AUTODL:* ${live.features.autodl ? 'ON' : 'OFF'}`,
-        `┣❍ *ANTISPAM:* ${live.features.antispam ? 'ON' : 'OFF'}  *MAINTENANCE:* ${live.features.maintenance ? 'ON' : 'OFF'}`,
+        `┏━━━✧ *CONNECTED* ✧━━━`,
+        `┃✧ *BOT:* ${stylizeHeading(name, config.font)}`,
+        `┃✧ *USER:* ${live.user}`,
+        `┃✧ *PREFIX:* [ ${p} ]`,
+        ...(live.userNumber ? [`┃✧ *NUMBER:* ${live.userNumber}`] : []),
+        `┃✧ *OWNER:* ${live.userNumber || owner}`,
+        `┃✧ *MODE:* ${privacy} 🌐`,
+        `┃✧ *PLATFORM:* ☁️ ${live.platform}`,
+        `┃✧ *STATUS:* 🟢 Online`,
+        `┃✧ *SPEED:* ${live.speed}ms`,
+        `┃✧ *UPTIME:* ${live.uptime}`,
+        `┃✧ *VERSION:* v${version}`,
+        `┃✧ *USAGE:* ${live.memory}`,
+        `┃✧ *RAM:* ${live.memory}`,
+        `┃✧ *SESSION:* 🔒 ${live.session}`,
+        `┃✧ *COMMANDS:* ${allCommands().length}`,
+        `┗━━━━━━━━━━━━━━━━━━`,
+        ``,
+        `┏━━━✧ *FEATURES* ✧━━━`,
+        `┃✧ *AUTOREAD:* ${live.features.autoread ? 'ON' : 'OFF'}  *AUTOTYPING:* ${live.features.autotyping ? 'ON' : 'OFF'}`,
+        `┃✧ *AUTOSTATUS:* ${live.features.autostatus ? 'ON' : 'OFF'}  *ANTICALL:* ${live.features.anticall ? 'ON' : 'OFF'}`,
+        `┃✧ *PMBLOCKER:* ${live.features.pmblocker ? 'ON' : 'OFF'}  *AUTODL:* ${live.features.autodl ? 'ON' : 'OFF'}`,
+        `┃✧ *ANTISPAM:* ${live.features.antispam ? 'ON' : 'OFF'}  *MAINTENANCE:* ${live.features.maintenance ? 'ON' : 'OFF'}`,
         ...(live.group ? [
-            `┣❍ *CHATBOT:* ${live.features.chatbot ? 'ON' : 'OFF'}  *ANTILINK:* ${live.features.antilink ? 'ON' : 'OFF'}`,
-            `┣❍ *WELCOME:* ${live.features.welcome ? 'ON' : 'OFF'}  *AUTOREACTION:* ${live.features.autoreaction ? 'ON' : 'OFF'}`,
-            `┣❍ *ANTISTICKER:* ${live.features.antisticker ? 'ON' : 'OFF'}  *ANTIPHOTO:* ${live.features.antiphoto ? 'ON' : 'OFF'}`,
-            `┣❍ *ANTIVIEWONCE:* ${live.features.antiviewonce ? 'ON' : 'OFF'}  *ANTIFAKE:* ${live.features.antifake ? 'ON' : 'OFF'}`,
-            `┣❍ *ANTIBOT:* ${live.features.antibot ? 'ON' : 'OFF'}  *HIDECHANNEL:* ${live.features.hidechannel ? 'ON' : 'OFF'}`
+            `┃✧ *CHATBOT:* ${live.features.chatbot ? 'ON' : 'OFF'}  *ANTILINK:* ${live.features.antilink ? 'ON' : 'OFF'}`,
+            `┃✧ *WELCOME:* ${live.features.welcome ? 'ON' : 'OFF'}  *AUTOREACTION:* ${live.features.autoreaction ? 'ON' : 'OFF'}`,
+            `┃✧ *ANTISTICKER:* ${live.features.antisticker ? 'ON' : 'OFF'}  *ANTIPHOTO:* ${live.features.antiphoto ? 'ON' : 'OFF'}`,
+            `┃✧ *ANTIVIEWONCE:* ${live.features.antiviewonce ? 'ON' : 'OFF'}  *ANTIFAKE:* ${live.features.antifake ? 'ON' : 'OFF'}`,
+            `┃✧ *ANTIBOT:* ${live.features.antibot ? 'ON' : 'OFF'}  *HIDECHANNEL:* ${live.features.hidechannel ? 'ON' : 'OFF'}`
         ] : []),
-        `┗━━━━━━━━━━━━━━━❍`
+        `┗━━━━━━━━━━━━━━━━━━`
     ];
     for (const category of MENU_CATEGORIES) {
         lines.push('', `${style.open} ${stylizeHeading(category.title, config.font)} ${style.close}`, `${style.bullet} Command list`, style.footer);

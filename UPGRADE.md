@@ -137,8 +137,11 @@ S3_SECRET_ACCESS_KEY=your-secret-key
 S3_ENDPOINT=https://your-s3-compatible-endpoint
 S3_FORCE_PATH_STYLE=false
 AUTH_STORE_DEBOUNCE_MS=2000
+AUTH_STORE_RETRY_DELAY_MS=30000
 ```
 
 For AWS S3, leave `S3_ENDPOINT` empty. For Cloudflare R2, use the account endpoint and set `S3_REGION=auto`. Grant the access key only `s3:GetObject`, `s3:PutObject`, and `s3:DeleteObject` on the chosen bucket/prefix. Keep exactly one `web` dyno using a given WhatsApp auth store; multiple bot processes sharing one session can cause WhatsApp stream conflicts.
 
-On boot the app restores the latest version referenced by `current.json`, then Baileys opens from that restored directory. Credential updates are written locally first and uploaded as an immutable generation; the pointer is published last so a dyno restart never reads a half-uploaded generation. An explicit WhatsApp logout clears the remote pointer and requires a new pairing. Old generations may remain for manual recovery and can be lifecycle-expired in the bucket.
+On boot the app restores the latest version referenced by `current.json`, then Baileys opens from that restored directory. Credential updates are written locally first and uploaded as an immutable generation; the pointer is published last so a dyno restart never reads a half-uploaded generation. Temporary storage failures are handled without stopping the connected bot and trigger automatic background retries; `AUTH_STORE_RETRY_DELAY_MS` controls the default 30-second retry delay. An explicit WhatsApp logout clears the remote pointer and requires a new pairing. Old generations may remain for manual recovery and can be lifecycle-expired in the bucket.
+
+After the first successful connection, the bot sends a safe online notice showing the version and whether durable backup is enabled. After a temporary WhatsApp disconnect, it sends a reconnected notice showing that the session was preserved and whether the latest backup is available. These notices never include bucket names, access keys, secrets, or session contents.
