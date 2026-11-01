@@ -122,6 +122,11 @@ function liveMenuState(context = {}) {
     const group = chatId.endsWith('@g.us');
     const groupState = (name) => Boolean(userGroupData[name]?.[chatId]);
     const health = global.botHealth?.snapshot?.() || {};
+    const durableStatus = global.durableAuthStore?.status?.();
+    const durableEnabled = durableStatus ? Boolean(durableStatus.enabled) : (String(process.env.AUTH_STORE || '').toLowerCase() === 's3' || process.env.BUCKETEER_BUCKET_NAME);
+    const sessionLabel = durableEnabled
+        ? (durableStatus?.retrying ? 'Durable backup retrying' : durableStatus?.lastSyncAt ? 'Durable backup saved' : 'Durable backup enabled')
+        : 'Local storage only';
     return {
         user,
         userNumber: configuredNumber || (senderNumber.length < 15 ? senderNumber : ''),
@@ -130,8 +135,7 @@ function liveMenuState(context = {}) {
         uptime: formatUptime(process.uptime()),
         platform: platformName(),
         memory: `${Math.round(process.memoryUsage().rss / 1024 / 1024)} MB`,
-        session: (String(process.env.AUTH_STORE || '').toLowerCase() === 's3' || process.env.BUCKETEER_BUCKET_NAME)
-            ? 'Durable backup enabled' : 'Local storage only',
+        session: sessionLabel,
         group,
         features: {
             autoread: enabled(autoread),

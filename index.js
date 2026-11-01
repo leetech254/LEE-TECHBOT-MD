@@ -225,6 +225,7 @@ try {
     durableAuthStoreConfigError = error
     durableAuthStore = { enabled: false, verifyAccess: async () => false, restore: async () => false, scheduleSync: () => Promise.resolve(false), flush: () => Promise.resolve(false), clear: () => Promise.resolve(false), status: () => ({ enabled: false, healthy: false, lastSyncAt: null, lastSyncFiles: 0, generation: null, retrying: false, error: error.message || String(error) }) }
 }
+global.durableAuthStore = durableAuthStore
 let shutdownInFlight = false
 let authPersistChain = Promise.resolve()
 async function gracefulShutdown(signal) {
