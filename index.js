@@ -285,7 +285,7 @@ let healthHeartbeatAnnounced = false
 function resolveHealthHeartbeatUrl(env = process.env) {
     const configured = String(env.HEALTHCHECK_URL || '').trim().replace(/\/+$/, '')
     if (configured) {
-        try { const url = new URL(configured); return url.protocol === 'https:' ? `${url.origin}${url.pathname || '/health'}` : '' } catch { return '' }
+        try { const url = new URL(configured); const pathname = url.pathname === '/' ? '/health' : (url.pathname || '/health'); return url.protocol === 'https:' ? `${url.origin}${pathname}${url.search}` : '' } catch { return '' }
     }
     const enabled = String(env.HEALTHCHECK_AUTO_PING || '').trim().toLowerCase()
     if (enabled === 'false' || enabled === '0' || enabled === 'off') return ''
