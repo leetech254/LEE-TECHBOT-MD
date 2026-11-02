@@ -183,6 +183,30 @@ test('host pairing code remains available after a page refresh until it expires'
     assert.equal(host.requestedNumbers.length, 1);
 });
 
+test('active pairing-code requests reuse the current code and the page explains when another code is allowed', async t => {
+    const host = await withServer(t);
+    host.setRuntime({ ready: true, qr: 'ready-qr' });
+    const page = await fetch(`${host.base}/pairing`);
+    const html = await page.text();
+    assert.match(html, /Request another code/);
+    assert.match(html, /request another code after this code expires/i);
+    await fetch(`${host.base}/api/pairing/mode`, {
+        method: 'POST', headers: sameOrigin(host), body: JSON.stringify({ mode: 'code' })
+    });
+    const first = await fetch(`${host.base}/api/pairing/code`, {
+        method: 'POST', headers: sameOrigin(host), body: JSON.stringify({ number: '254712345678' })
+    });
+    assert.equal(first.status, 200);
+    const second = await fetch(`${host.base}/api/pairing/code`, {
+        method: 'POST', headers: sameOrigin(host), body: JSON.stringify({ number: '254712345678' })
+    });
+    const result = await second.json();
+    assert.equal(second.status, 200);
+    assert.equal(result.reused, true);
+    assert.equal(result.code, 'AB12CD34');
+    assert.equal(host.requestedNumbers.length, 1);
+});
+
 test('host pairing code route rejects not-ready sockets and malformed numbers', async t => {
     const host = await withServer(t);
     await fetch(`${host.base}/api/pairing/mode`, {
