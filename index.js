@@ -279,6 +279,45 @@ let hostWebPairingMode = null
 let hostWebPairingCodeInFlight = false
 let hostPairingWebServer = null
 let pairingWebWindowTimer = null
+let healthHeartbeatTimer = null
+let healthHeartbeatInFlight = false
+let healthHeartbeatAnnounced = false
+function resolveHealthHeartbeatUrl(env = process.env) {
+    const configured = String(env.HEALTHCHECK_URL || '').trim().replace(/\/+$/, '')
+    if (configured) {
+        try { const url = new URL(configured); return url.protocol === 'https:' ? `${url.origin}${url.pathname || '/health'}` : '' } catch { return '' }
+    }
+    const enabled = String(env.HEALTHCHECK_AUTO_PING || '').trim().toLowerCase()
+    if (enabled === 'false' || enabled === '0' || enabled === 'off') return ''
+    const appName = String(env.HEROKU_APP_NAME || '').trim()
+    return appName ? `https://${appName}.herokuapp.com/health` : ''
+}
+async function pingHealthEndpoint(url) {
+    if (healthHeartbeatInFlight || !url || typeof fetch !== 'function') return
+    healthHeartbeatInFlight = true
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 8000)
+    try {
+        const response = await fetch(url, { method: 'GET', headers: { 'User-Agent': 'LEE-TECHBOT-Heartbeat/1.0', Accept: 'application/json' }, signal: controller.signal })
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        if (!healthHeartbeatAnnounced) { console.log(`[heartbeat] Health check active: ${url}`); healthHeartbeatAnnounced = true }
+    } catch (error) {
+        console.warn(`[heartbeat] Health check failed: ${error.name === 'AbortError' ? 'timeout' : error.message || error}`)
+    } finally {
+        clearTimeout(timeout)
+        healthHeartbeatInFlight = false
+    }
+}
+function startHealthHeartbeat() {
+    if (healthHeartbeatTimer) { clearInterval(healthHeartbeatTimer); healthHeartbeatTimer = null }
+    const url = resolveHealthHeartbeatUrl()
+    if (!url) return
+    const interval = Math.max(60_000, Math.min(25 * 60 * 1000, Number(process.env.HEALTHCHECK_INTERVAL_MS || 20 * 60 * 1000)))
+    setTimeout(() => pingHealthEndpoint(url), 10_000).unref?.()
+    healthHeartbeatTimer = setInterval(() => { void pingHealthEndpoint(url) }, interval)
+    healthHeartbeatTimer.unref?.()
+    console.log(`[heartbeat] Scheduled every ${Math.round(interval / 60_000)} minutes.`)
+}
 let hostWebPairing401Retries = 0
 const configuredHostPairingMode = resolveHostPairingMode(process.env)
 let terminalQrMode = !pairingWebEnabled && configuredHostPairingMode?.mode === 'qr'
@@ -414,6 +453,7 @@ function startHostPairingWebServer() {
             if (publicUrl) console.log(`[pairing-web] Open ${publicUrl}/pairing`)
             else console.log(`[pairing-web] In your host Domains panel, expose this HTTP service and open its assigned public URL followed by /pairing.`)
             if (!hostPairingRuntime.connected && !hostPairingRuntime.registered) armPairingWebWindow()
+            startHealthHeartbeat()
             resolve()
         })
     })

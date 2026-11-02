@@ -65,6 +65,13 @@ test('bot supports current PaaS Node runtime and declares a public web process',
     assert.match(procfile, /--max-old-space-size=384/);
     assert.match(procfile, /--expose-gc/);
 });
+test('Heroku health heartbeat is configurable and uses the public health route', () => {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'index.js'), 'utf8');
+    assert.match(source, /HEALTHCHECK_AUTO_PING/);
+    assert.match(source, /HEALTHCHECK_INTERVAL_MS/);
+    assert.match(source, /https:\/\/\$\{appName\}\.herokuapp\.com\/health/);
+    assert.match(source, /startHealthHeartbeat\(\)/);
+});
 
 test('automatic web pairing is limited to a new session without explicit terminal choices', () => {
     const defaults = { startupMode: 'auto', registered: false, hasSessionBundle: false, hasTerminalPairing: false, promptEnabled: false };

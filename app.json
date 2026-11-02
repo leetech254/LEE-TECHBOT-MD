@@ -34,6 +34,14 @@
       "value": "auto",
       "description": "Serve the QR/pairing page automatically on the Heroku web URL."
     },
+    "HEALTHCHECK_AUTO_PING": {
+      "value": "true",
+      "description": "Ping the public /health endpoint every 20 minutes to keep an Eco dyno warm. Set false to disable."
+    },
+    "HEALTHCHECK_INTERVAL_MS": {
+      "value": "1200000",
+      "description": "Heartbeat interval in milliseconds; bounded by the bot to 1-25 minutes."
+    },
     "AUTH_DIR": {
       "value": "/tmp/lee-techbot-auth",
       "description": "Ephemeral local cache; the durable S3-compatible store is the source of truth on Heroku."
