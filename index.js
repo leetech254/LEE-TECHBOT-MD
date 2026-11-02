@@ -422,6 +422,17 @@ async function startXeonBotInc() {
     if (activeSocket || socketStartInFlight || global.__updateRestarting || global.__shutdownRequested || terminalPairingStopped) return activeSocket
     socketStartInFlight = true
     try {
+        // Heroku terminates web dynos that have not bound $PORT within its
+        // boot window. S3/Bucketeer verification and session restoration can
+        // legitimately take longer than that window, so expose the pairing
+        // endpoint before doing any remote auth-store work. The endpoint only
+        // reports startup state; WhatsApp is still blocked until durable auth
+        // has been verified and restored below.
+        const hasProviderPort = Boolean(String(process.env.PORT || '').trim())
+        if (hasProviderPort && pairingWebStartupMode !== 'manual' && !hostPairingWebServer) {
+            pairingWebEnabled = true
+            await startHostPairingWebServer()
+        }
         if (durableAuthStoreConfigError) {
             const error = new Error(`Durable auth storage is not configured correctly: ${durableAuthStoreConfigError.message || durableAuthStoreConfigError}`)
             error.code = 'AUTH_STORE_CONFIG_INVALID'
