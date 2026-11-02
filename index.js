@@ -199,13 +199,14 @@ setInterval(() => {
         global.gc()
         console.log('🧹 Garbage collection completed')
     }
-}, 60_000) // every 1 minute
+}, 30_000) // every 30 seconds when --expose-gc is enabled
 
 // Memory monitoring - Restart if RAM gets too high
 setInterval(() => {
     const used = process.memoryUsage().rss / 1024 / 1024
-    if (used > 400) {
-        console.log('⚠️ RAM too high (>400MB), restarting bot...')
+    const limit = Math.max(256, Number(process.env.BOT_MEMORY_LIMIT_MB || 400))
+    if (used > limit) {
+        console.log(`⚠️ RAM too high (>${limit}MB), restarting bot...`)
         void gracefulShutdown('memory-limit') // Panel will auto-restart
     }
 }, 30_000) // check every 30 seconds
@@ -512,7 +513,7 @@ async function startXeonBotInc() {
             error.code = 'NO_SESSION_CONFIGURED'
             throw error
         }
-        const msgRetryCounterCache = new NodeCache()
+        const msgRetryCounterCache = new NodeCache({ stdTTL: 300, checkperiod: 60, useClones: false, maxKeys: 1000 })
 
         const XeonBotInc = makeWASocket({
             // Use the Web version bundled and tested with Baileys rc14.
@@ -528,7 +529,7 @@ async function startXeonBotInc() {
             // Keep outgoing messages flowing through messages.upsert so the
             // retry callback can return their original plaintext to WhatsApp.
             emitOwnEvents: true,
-            generateHighQualityLinkPreview: true,
+            generateHighQualityLinkPreview: process.env.WA_HIGH_QUALITY_LINK_PREVIEW === 'true',
             syncFullHistory: false,
             getMessage: async (key) => {
                 let jid = jidNormalizedUser(key.remoteJid)

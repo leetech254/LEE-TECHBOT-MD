@@ -19,6 +19,8 @@ const chatbotRate = new Map();
 const CHATBOT_COOLDOWN_MS = 15000;
 const CHATBOT_WINDOW_MS = 60 * 60 * 1000;
 const CHATBOT_MAX_PER_HOUR = 30;
+const MAX_CHAT_MEMORY_USERS = Number(process.env.CHATBOT_MEMORY_USERS || 500);
+const MAX_CHAT_HISTORY = Number(process.env.CHATBOT_HISTORY_MESSAGES || (process.env.DYNO || process.env.HEROKU_APP_NAME ? 8 : 20));
 const AUTOREPLY_COOLDOWN_MS = 15000;
 const autoreplyRate = new Map();
 
@@ -550,10 +552,15 @@ async function handleChatbotResponse(sock, chatId, message, userMessage, senderI
         // Add message to history (keep last 5 messages)
         const messages = chatMemory.messages.get(senderId);
         messages.push(cleanedMessage);
-        if (messages.length > 20) {
+        if (messages.length > MAX_CHAT_HISTORY) {
             messages.shift();
         }
         chatMemory.messages.set(senderId, messages);
+        if (chatMemory.messages.size > MAX_CHAT_MEMORY_USERS) {
+            const oldest = chatMemory.messages.keys().next().value
+            chatMemory.messages.delete(oldest)
+            chatMemory.userInfo.delete(oldest)
+        }
 
         // Show typing indicator
         await showTyping(sock, chatId);

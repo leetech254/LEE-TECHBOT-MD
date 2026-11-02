@@ -61,7 +61,9 @@ test('bot supports current PaaS Node runtime and declares a public web process',
     const packageJson = require('../package.json');
     const procfile = fs.readFileSync(path.join(__dirname, '..', 'Procfile'), 'utf8').trim();
     assert.equal(packageJson.engines.node, '>=20.0.0');
-    assert.equal(procfile, 'web: npm start');
+    assert.match(procfile, /^web: .*npm start$/);
+    assert.match(procfile, /--max-old-space-size=384/);
+    assert.match(procfile, /--expose-gc/);
 });
 
 test('automatic web pairing is limited to a new session without explicit terminal choices', () => {
