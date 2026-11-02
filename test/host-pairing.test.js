@@ -64,6 +64,8 @@ test('bot supports current PaaS Node runtime and declares a public web process',
     assert.match(procfile, /^web: .*npm start$/);
     assert.match(procfile, /--max-old-space-size=384/);
     assert.match(procfile, /--expose-gc/);
+    assert.doesNotMatch(procfile, /--optimize-for-size/);
+    assert.doesNotMatch(packageJson.scripts['start:optimized'], /--optimize-for-size/);
 });
 test('Heroku health heartbeat is configurable and uses the public health route', () => {
     const source = fs.readFileSync(path.join(__dirname, '..', 'index.js'), 'utf8');
