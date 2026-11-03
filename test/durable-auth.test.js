@@ -79,6 +79,33 @@ test('flush publishes the latest generation before shutdown', async () => {
   fs.rmSync(authDir, { recursive: true, force: true })
 })
 
+test('snapshot skips an auth file removed during reconnect without failing the backup', async () => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lee-auth-'))
+  fs.writeFileSync(path.join(authDir, 'creds.json'), JSON.stringify({ registered: true }))
+  fs.writeFileSync(path.join(authDir, 'vanish.json'), '{}')
+  const objects = new Map()
+  const client = fakeS3(objects)
+  const originalReadFile = fs.promises.readFile
+  fs.promises.readFile = async (target, ...args) => {
+    if (String(target).endsWith('vanish.json')) {
+      try { fs.unlinkSync(target) } catch (_) {}
+      const error = new Error('file disappeared')
+      error.code = 'ENOENT'
+      throw error
+    }
+    return originalReadFile.call(fs.promises, target, ...args)
+  }
+  try {
+    const store = createDurableAuthStore({ authDir, client, env: { AUTH_STORE: 's3', S3_BUCKET: 'test' } })
+    store.scheduleSync()
+    await store.flush()
+    assert.ok(objects.has('leetechbot/auth/current.json'))
+  } finally {
+    fs.promises.readFile = originalReadFile
+    fs.rmSync(authDir, { recursive: true, force: true })
+  }
+})
+
 
 test('transient object-storage failures are retried before publishing the pointer', async () => {
   const authDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lee-auth-'))

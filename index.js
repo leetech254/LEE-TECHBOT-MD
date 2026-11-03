@@ -453,6 +453,44 @@ function startHostPairingWebServer() {
                 })
             }
         },
+        onFreshPairing: async () => {
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer)
+                reconnectTimer = null
+            }
+            clearRegisteredSessionWatchdog()
+            if (activeSocket) {
+                const oldSocket = activeSocket
+                activeSocket = null
+                try { oldSocket.ws?.close?.() } catch (_) {}
+            }
+            if (durableAuthStore.enabled) await durableAuthStore.clear()
+            rmSync(authDir, { recursive: true, force: true })
+            fs.mkdirSync(authDir, { recursive: true, mode: 0o700 })
+            sessionBundle = ''
+            terminalPairingNumber = ''
+            terminalQrMode = false
+            terminalPairingStopped = false
+            pairingWebEnabled = true
+            hostWebPairingMode = null
+            hostPairing401Retries = 0
+            hostPairingRuntime.mode = null
+            hostPairingRuntime.connection = 'starting'
+            hostPairingRuntime.ready = false
+            hostPairingRuntime.connected = false
+            hostPairingRuntime.registered = false
+            hostPairingRuntime.expired = false
+            hostPairingRuntime.phone = ''
+            hostPairingRuntime.qr = ''
+            hostPairingRuntime.error = ''
+            await startHostPairingWebServer()
+            if (!activeSocket && !socketStartInFlight && !global.__updateRestarting) {
+                startXeonBotInc().catch(error => {
+                    hostPairingRuntime.error = 'The bot could not start a fresh WhatsApp connection. Check the host logs.'
+                    console.error('[pairing-web] Could not start fresh pairing socket:', error.message || error)
+                })
+            }
+        },
         requestPairingCode: async (phone) => {
             if (hostWebPairingCodeInFlight) throw Object.assign(new Error('A code request is already in progress.'), { statusCode: 429 })
             if (!activeSocket || !hostPairingRuntime.ready) throw Object.assign(new Error('The WhatsApp connection is not ready.'), { statusCode: 503 })

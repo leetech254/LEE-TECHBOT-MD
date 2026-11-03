@@ -17,12 +17,17 @@ async function withServer(t, overrides = {}) {
     };
     const requestedNumbers = [];
     const retryRequests = [];
+    const freshRequests = [];
     const pairing = createHostPairingServer({
         getRuntime: () => runtime,
         onMode: async mode => { runtime = { ...runtime, mode }; },
         onRetry: async () => {
             retryRequests.push(true);
             runtime = { ...runtime, mode: '', connection: 'starting', ready: false, connected: false, registered: false, expired: false, qr: '', error: '' };
+        },
+        onFreshPairing: async () => {
+            freshRequests.push(true);
+            runtime = { ...runtime, mode: '', connection: 'starting', ready: false, connected: false, registered: false, expired: false, qr: '', error: '', phone: '' };
         },
         requestPairingCode: async phone => {
             requestedNumbers.push(phone);
@@ -41,6 +46,7 @@ async function withServer(t, overrides = {}) {
         base,
         requestedNumbers,
         retryRequests,
+        freshRequests,
         setRuntime(next) { runtime = { ...runtime, ...next }; },
         getRuntime() { return runtime; }
     };
@@ -137,6 +143,24 @@ test('registered but disconnected sessions can be reconnected without clearing c
     });
     assert.equal(response.status, 200);
     assert.equal(host.retryRequests.length, 1);
+});
+
+test('registered broken sessions can be explicitly cleared before requesting a new code', async t => {
+    const host = await withServer(t);
+    host.setRuntime({ registered: true, connected: false, connection: 'close', phone: '254712345678' });
+    const fresh = await fetch(`${host.base}/api/pairing/fresh`, {
+        method: 'POST', headers: sameOrigin(host), body: '{}'
+    });
+    assert.equal(fresh.status, 200);
+    assert.equal(host.freshRequests.length, 1);
+    host.setRuntime({ ready: true });
+    await fetch(`${host.base}/api/pairing/mode`, {
+        method: 'POST', headers: sameOrigin(host), body: JSON.stringify({ mode: 'code' })
+    });
+    const code = await fetch(`${host.base}/api/pairing/code`, {
+        method: 'POST', headers: sameOrigin(host), body: JSON.stringify({ number: '+254 712 345 678' })
+    });
+    assert.equal(code.status, 200);
 });
 
 test('host pairing status and QR image work from the host page origin', async t => {
