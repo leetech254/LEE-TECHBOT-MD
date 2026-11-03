@@ -60,6 +60,7 @@ test('host pairing page starts with method selection and no QR generated', async
     assert.match(html, /Reconnect saved session/);
     assert.match(html, /Live connection details/);
     assert.match(html, /id="whatsapp-state"/);
+    assert.match(html, /id="paired-number"/);
     assert.match(html, /id="pairing-state"/);
     assert.match(html, /Saved credentials were restored/);
     assert.match(html, /Nothing is generated until you select a method/);
@@ -151,6 +152,21 @@ test('host pairing status and QR image work from the host page origin', async t 
     assert.equal(state.mode, 'qr');
     assert.equal(state.ready, true);
     assert.match(state.qr, /^data:image\/png;base64,/);
+});
+
+test('private pairing status includes the linked number while public summary redacts it', async t => {
+    const host = await withServer(t);
+    host.setRuntime({ registered: true, connected: true, phone: '254712345678' });
+    const status = await fetch(`${host.base}/api/pairing/status`);
+    const state = await status.json();
+    assert.equal(status.status, 200);
+    assert.equal(state.phone, '254712345678');
+    const summary = await fetch(`${host.base}/api/pairing/summary`, {
+        headers: { Origin: 'https://pair.example', 'Sec-Fetch-Site': 'cross-site' }
+    });
+    const publicState = await summary.json();
+    assert.equal(Object.hasOwn(publicState, 'phone'), false);
+    assert.equal(JSON.stringify(publicState).includes('254712345678'), false);
 });
 
 test('host pairing code requests normalize the number and call the bot socket callback', async t => {

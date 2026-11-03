@@ -274,7 +274,11 @@ let sessionBundle = process.env.SESSION_BUNDLE || process.env.SESSION_ID || ''
 const pairingWebStartupMode = resolvePairingWebStartupMode(process.env.PAIRING_WEB_ENABLED)
 const autoPairAfterLogout = pairingWebStartupMode !== 'manual'
 let pairingWebEnabled = pairingWebStartupMode === 'always'
-const hostPairingRuntime = { connection: 'starting', ready: false, connected: false, registered: false, expired: false, qr: '', error: '', mode: null }
+const hostPairingRuntime = { connection: 'starting', ready: false, connected: false, registered: false, expired: false, qr: '', error: '', mode: null, phone: '' }
+function pairedPhoneFromJid(jid) {
+    const raw = String(jid || '').split('@')[0].split(':')[0]
+    return normalizeWhatsAppNumber(raw)
+}
 let hostWebPairingMode = null
 let hostWebPairingCodeInFlight = false
 let hostPairingWebServer = null
@@ -520,6 +524,7 @@ async function startXeonBotInc() {
         let { state, saveCreds } = await useMultiFileAuthState(authDir)
         hostPairingRuntime.registered = Boolean(state.creds.registered)
         hostPairingRuntime.connected = false
+        hostPairingRuntime.phone = pairedPhoneFromJid(state.creds.me?.id || state.creds.me?.lid || '')
         if (durableAuthStore.enabled && state.creds.registered) {
             await durableAuthStore.scheduleSync()
         }
@@ -800,6 +805,7 @@ async function startXeonBotInc() {
         }
         if (connection === 'open') {
             hostPairingRuntime.registered = true
+            hostPairingRuntime.phone = pairedPhoneFromJid(XeonBotInc.user?.id || XeonBotInc.authState?.creds?.me?.id || '') || hostPairingRuntime.phone
             hostPairingRuntime.qr = ''
             hostPairingRuntime.ready = false
             hostPairingRuntime.error = ''
@@ -1014,6 +1020,7 @@ async function startXeonBotInc() {
                     hostPairingRuntime.ready = false
                     hostPairingRuntime.connected = false
                     hostPairingRuntime.registered = false
+                    hostPairingRuntime.phone = ''
                     hostPairingRuntime.qr = ''
                     hostPairingRuntime.error = 'The saved WhatsApp session was rejected. Choose QR or phone-code pairing on the host page; no process restart is needed.'
                     try {

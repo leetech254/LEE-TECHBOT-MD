@@ -36,6 +36,7 @@
       <div class="summary" role="group" aria-label="Live connection details">
         <div class="summary-item"><span class="tiny">Host page</span><strong id="host-state">Online</strong></div>
         <div class="summary-item"><span class="tiny">WhatsApp</span><strong id="whatsapp-state">Starting</strong></div>
+        <div class="summary-item"><span class="tiny">Paired number</span><strong id="paired-number">Not linked</strong></div>
         <div class="summary-item"><span class="tiny">Pairing</span><strong id="pairing-state">Waiting</strong></div>
         <div class="summary-item"><span class="tiny">Last check</span><strong id="updated-state">—</strong></div>
       </div>
@@ -104,6 +105,7 @@
   function updateSummary(data) {
     $('host-state').textContent='Online';
     $('whatsapp-state').textContent=data.connected?'Connected':data.registered?'Session saved':data.connection==='close'?'Reconnecting':data.ready?'Ready':'Connecting';
+    $('paired-number').textContent=data.phone?`+${data.phone}`:'Not linked';
       $('pairing-state').textContent=data.connected?'Complete':data.expired?'Expired':data.mode==='code'&&data.code?'Code ready':data.mode==='qr'&&data.ready?'QR ready':data.mode?'Preparing':'Choose a method';
     $('updated-state').textContent=new Date().toLocaleTimeString(); updateSteps(data);
   }
