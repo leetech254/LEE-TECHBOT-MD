@@ -319,6 +319,8 @@ function startHealthHeartbeat() {
     console.log(`[heartbeat] Scheduled every ${Math.round(interval / 60_000)} minutes.`)
 }
 let hostWebPairing401Retries = 0
+let registeredSessionWatchdogTimer = null
+let registeredSessionWatchdogAttempts = 0
 const configuredHostPairingMode = resolveHostPairingMode(process.env)
 let terminalQrMode = !pairingWebEnabled && configuredHostPairingMode?.mode === 'qr'
 let terminalPairingNumber = !pairingWebEnabled && configuredHostPairingMode?.mode === 'pair' ? configuredHostPairingMode.phone : ''
@@ -363,7 +365,31 @@ function armPairingWebWindow() {
     }, 30 * 60 * 1000)
     if (typeof pairingWebWindowTimer.unref === 'function') pairingWebWindowTimer.unref()
 }
-
+function clearRegisteredSessionWatchdog() {
+    if (registeredSessionWatchdogTimer) clearTimeout(registeredSessionWatchdogTimer)
+    registeredSessionWatchdogTimer = null
+}
+function armRegisteredSessionWatchdog(socket) {
+    clearRegisteredSessionWatchdog()
+    if (!socket?.authState?.creds?.registered || registeredSessionWatchdogAttempts >= 3) return
+    registeredSessionWatchdogTimer = setTimeout(async () => {
+        registeredSessionWatchdogTimer = null
+        if (activeSocket !== socket || hostPairingRuntime.connected || !socket.authState?.creds?.registered) return
+        registeredSessionWatchdogAttempts += 1
+        hostPairingRuntime.error = `Saved session is not connected yet. Reconnecting automatically (${registeredSessionWatchdogAttempts}/3)…`
+        console.warn(`[session-recovery] Registered session did not become usable; reconnecting (${registeredSessionWatchdogAttempts}/3).`)
+        activeSocket = null
+        try { socket.ws?.close?.() } catch (_) {}
+        if (!global.__updateRestarting && !global.__shutdownRequested && !reconnectTimer) {
+            reconnectTimer = setTimeout(async () => {
+                reconnectTimer = null
+                if (!activeSocket && !socketStartInFlight && !global.__updateRestarting && !global.__shutdownRequested) await startXeonBotInc()
+            }, 2000)
+            reconnectTimer.unref?.()
+        }
+    }, 45 * 1000)
+    registeredSessionWatchdogTimer.unref?.()
+}
 function startHostPairingWebServer() {
     if (!pairingWebEnabled) return Promise.resolve()
     if (hostPairingWebServer) {
@@ -409,6 +435,12 @@ function startHostPairingWebServer() {
             hostPairingRuntime.expired = false
             hostPairingRuntime.qr = ''
             hostPairingRuntime.error = ''
+            clearRegisteredSessionWatchdog()
+            if (activeSocket) {
+                const oldSocket = activeSocket
+                activeSocket = null
+                try { oldSocket.ws?.close?.() } catch (_) {}
+            }
             await startHostPairingWebServer()
             if (!activeSocket && !socketStartInFlight && !global.__updateRestarting) {
                 startXeonBotInc().catch(error => {
@@ -586,6 +618,7 @@ async function startXeonBotInc() {
             keepAliveIntervalMs: Number(process.env.WA_KEEPALIVE_MS || 10000),
         })
         activeSocket = XeonBotInc
+        armRegisteredSessionWatchdog(XeonBotInc)
 
         // WhatsApp can leave replies to the linked bot account's own chat
         // showing "Waiting for this message" when the retry callback cannot
@@ -807,6 +840,8 @@ async function startXeonBotInc() {
         if (connection === "open") {
             if (XeonBotInc.__connectionOpened) return
             XeonBotInc.__connectionOpened = true
+            clearRegisteredSessionWatchdog()
+            registeredSessionWatchdogAttempts = 0
             // WhatsApp may report the WebSocket open before the own PN/LID
             // Signal sessions are usable. Delay only self-chat sends so the
             // first post-restart owner reply is not rendered as a retry
@@ -894,6 +929,7 @@ async function startXeonBotInc() {
                 return
             }
             XeonBotInc.__connectionOpened = false
+            clearRegisteredSessionWatchdog()
             activeSocket = null
             if (global.__updateRestarting) {
                 console.log(chalk.yellow('Update restart requested; suppressing reconnect for the closing socket.'))

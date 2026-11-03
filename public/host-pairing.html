@@ -41,8 +41,8 @@
       </div>
 
       <section class="retry" id="retry-panel" hidden>
-        <p class="tiny">The connection needs another attempt. Start a fresh pairing here; the bot process will not restart.</p>
-        <button class="button" id="retry-button" type="button">Start a new pairing</button>
+        <p class="tiny" id="retry-help">The connection needs another attempt. Start a fresh pairing here; the bot process will not restart.</p>
+        <button class="button" id="retry-button" type="button">Reconnect saved session</button>
       </section>
 
       <div class="methods" id="methods">
@@ -111,7 +111,7 @@
     try {
       const data=await api('/api/pairing/status'); updateSummary(data);
       if (data.connected) { $('methods').classList.remove('visible'); $('retry-panel').hidden=true; $('success').hidden=false; message('WhatsApp is connected to this bot.','good'); clearInterval(timer); timer=null; return; }
-      if (data.registered) { $('methods').classList.remove('visible'); $('retry-panel').hidden=true; $('success').hidden=true; message(data.error||'Saved WhatsApp credentials found. Waiting for the bot to finish reconnecting; this page will keep checking.','good'); return; }
+      if (data.registered) { $('methods').classList.remove('visible'); $('success').hidden=true; $('retry-panel').hidden=!data.connected; $('retry-help').textContent='Saved credentials were restored, but WhatsApp is not connected. Reconnect the saved session here; the bot process will not restart.'; message(data.connected?'WhatsApp is connected to this bot.':(data.error||'Saved WhatsApp credentials found, but the connection is still starting. Keep this page open or reconnect the saved session.'),data.connected?'good':'bad'); return; }
       $('success').hidden=true;
       if (data.expired) { windowExpired=true; $('methods').classList.remove('visible'); $('retry-panel').hidden=false; message(data.error||'The pairing window expired. Start a new pairing here without restarting the bot.','bad'); clearInterval(timer); timer=null; return; }
       $('retry-panel').hidden=!(data.error&&!data.ready); $('methods').classList.add('visible');
@@ -135,7 +135,7 @@
   async function copyPairingCode() { const compact=$('code').textContent.replace(/-/g,''); try { if(navigator.clipboard?.writeText) await navigator.clipboard.writeText(compact); else throw new Error('clipboard unavailable'); message('Pairing code copied. Enter it in WhatsApp now.','good'); } catch { const selection=window.getSelection(); const range=document.createRange(); range.selectNodeContents($('code')); selection.removeAllRanges(); selection.addRange(range); message('Code selected. Tap Copy or use your phone’s copy action, then enter it in WhatsApp.','good'); } }
   $('copy-code').onclick=copyPairingCode; $('code').onclick=copyPairingCode; $('code').onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();copyPairingCode();}};
   $('get-code').onclick=async()=>{const button=$('get-code');const normalized=normalizePhone($('phone').value);if(!normalized){message('Enter a valid international WhatsApp number with country code, for example +254 712 345 678.','bad');$('phone').focus();return;} $('phone').value=`+${normalized}`;updatePhonePreview();button.disabled=true;button.textContent='Requesting…';try{const result=await api('/api/pairing/code',{method:'POST',body:JSON.stringify({number:normalized})});activeCodeExpiresAt=Date.now()+Math.max(1,Number(result.expiresInSeconds)||60)*1000;$('code').textContent=(result.code.match(/.{1,4}/g)||[result.code]).join('-');$('code').hidden=false;$('code-hint').hidden=false;$('copy-code').hidden=false;$('code-retry-hint').hidden=false;message(result.reused?'The current pairing code is still valid. Enter it in WhatsApp before requesting another.':'Pairing code ready. Enter it in WhatsApp before it expires.','good');}catch(error){message(error.message,'bad');button.disabled=false;button.textContent='Request another code';}};
-  $('retry-button').onclick=async()=>{const button=$('retry-button');button.disabled=true;button.textContent='Starting…';try{await api('/api/pairing/retry',{method:'POST',body:'{}'});windowExpired=false;markChoice('');$('code').hidden=true;$('code-hint').hidden=true;$('copy-code').hidden=true;currentMode='';$('retry-panel').hidden=true;$('success').hidden=true;$('methods').classList.add('visible');if(!timer)timer=setInterval(refresh,2000);await refresh();}catch(error){message(error.message,'bad');}finally{button.disabled=false;button.textContent='Start a new pairing';}};
+  $('retry-button').onclick=async()=>{const button=$('retry-button');button.disabled=true;button.textContent='Reconnecting…';try{await api('/api/pairing/retry',{method:'POST',body:'{}'});windowExpired=false;markChoice('');$('code').hidden=true;$('code-hint').hidden=true;$('copy-code').hidden=true;currentMode='';$('retry-panel').hidden=true;$('success').hidden=false;$('methods').classList.add('visible');if(!timer)timer=setInterval(refresh,2000);await refresh();}catch(error){message(error.message,'bad');}finally{button.disabled=false;button.textContent='Reconnect saved session';}};
   refresh(); if(!windowExpired) timer=setInterval(refresh,2000);
 })();
 </script>

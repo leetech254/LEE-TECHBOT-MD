@@ -57,11 +57,11 @@ test('host pairing page starts with method selection and no QR generated', async
     assert.equal(page.status, 200);
     const html = await page.text();
     assert.match(html, /Pair directly on this bot host/);
-    assert.match(html, /Start a new pairing/);
+    assert.match(html, /Reconnect saved session/);
     assert.match(html, /Live connection details/);
     assert.match(html, /id="whatsapp-state"/);
     assert.match(html, /id="pairing-state"/);
-    assert.match(html, /Waiting for the bot to finish reconnecting/);
+    assert.match(html, /Saved credentials were restored/);
     assert.match(html, /Nothing is generated until you select a method/);
     const response = await fetch(`${host.base}/api/pairing/status`);
     const state = await response.json();
@@ -125,6 +125,16 @@ test('expired pairing window stays readable but cannot return a QR or accept con
     });
     assert.equal(retry.status, 200);
     assert.equal(host.getRuntime().expired, false);
+    assert.equal(host.retryRequests.length, 1);
+});
+
+test('registered but disconnected sessions can be reconnected without clearing credentials', async t => {
+    const host = await withServer(t);
+    host.setRuntime({ registered: true, connected: false, connection: 'close', error: 'Saved session is not connected yet.' });
+    const response = await fetch(`${host.base}/api/pairing/retry`, {
+        method: 'POST', headers: sameOrigin(host), body: '{}'
+    });
+    assert.equal(response.status, 200);
     assert.equal(host.retryRequests.length, 1);
 });
 
