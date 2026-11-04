@@ -2,7 +2,6 @@ FROM node:20-bookworm-slim
 
 ENV NODE_ENV=production \
     AUTH_DIR=/app/auth \
-    AUTH_STORE=s3 \
     PAIRING_WEB_ENABLED=auto \
     NODE_OPTIONS="--max-old-space-size=384 --expose-gc"
 
@@ -22,6 +21,10 @@ RUN mkdir -p /app/auth /app/data /app/temp \
     && chown -R node:node /app/auth /app/data /app/temp
 
 USER node
+
+# HostKB must attach persistent storage at this path. The WhatsApp session is
+# stored here directly; no external database is required for this profile.
+VOLUME ["/app/auth"]
 
 # HostKB injects PORT at runtime. The application also exposes /health and /pairing.
 EXPOSE 3000

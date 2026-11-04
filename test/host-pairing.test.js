@@ -71,11 +71,13 @@ test('HostKB deployment profile uses the provider port and durable auth storage'
     const dockerfile = fs.readFileSync(path.join(__dirname, '..', 'Dockerfile'), 'utf8');
     const guide = fs.readFileSync(path.join(__dirname, '..', 'HOSTKB.md'), 'utf8');
     assert.match(dockerfile, /FROM node:20-/);
-    assert.match(dockerfile, /AUTH_STORE=s3/);
+    assert.doesNotMatch(dockerfile, /AUTH_STORE=s3/);
+    assert.match(dockerfile, /VOLUME \["\/app\/auth"\]/);
     assert.match(dockerfile, /EXPOSE 3000/);
     assert.match(dockerfile, /CMD \["npm", "start"\]/);
     assert.match(dockerfile, /process\.env\.PORT\|\|3000/);
-    assert.match(guide, /S3_PREFIX=lee-techbot\/hostkb\/production/);
+    assert.match(guide, /persistent volume to `\/app\/auth`/);
+    assert.match(guide, /no external database is required/);
     assert.match(guide, /provider-assigned `PORT`/);
 });
 test('Heroku health heartbeat is configurable and uses the public health route', () => {
