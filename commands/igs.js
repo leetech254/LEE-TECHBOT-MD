@@ -9,7 +9,7 @@ const settings = require('../settings');
 const { stickercropFromBuffer } = require('./stickercrop');
 
 async function convertBufferToStickerWebp(inputBuffer, isAnimated, cropSquare) {
-    const tmpDir = path.join(process.cwd(), 'tmp');
+    const tmpDir = require('../lib/runtime').TMP_DIR;
     if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
 
     const tempInputBase = path.join(tmpDir, `igs_${Date.now()}_${Math.random().toString(36).slice(2)}`);
@@ -271,7 +271,7 @@ async function igsCommand(sock, chatId, message, crop = false) {
 
 // Extreme fallback to force very small stickers when needed
 async function forceMiniSticker(inputBuffer, isVideo, cropSquare) {
-    const tmpDir = path.join(process.cwd(), 'tmp');
+    const tmpDir = require('../lib/runtime').TMP_DIR;
     if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
 
     const tempInput = path.join(tmpDir, `mini_${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`);

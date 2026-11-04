@@ -48,7 +48,7 @@ async function emojimixCommand(sock, chatId, msg) {
         const imageUrl = data.results[0].url;
 
         // Create temp directory if it doesn't exist
-        const tmpDir = path.join(process.cwd(), 'tmp');
+        const tmpDir = require('../lib/runtime').TMP_DIR;
         if (!fs.existsSync(tmpDir)) {
             fs.mkdirSync(tmpDir, { recursive: true });
         }

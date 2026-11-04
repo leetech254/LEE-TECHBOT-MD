@@ -24,7 +24,7 @@ async function sendAnimu(sock, chatId, message, type) {
     // Prefer link (gif/image). Send as sticker if applicable; fallback to image
     // helper to convert media buffer to sticker webp
     async function convertMediaToSticker(mediaBuffer, isAnimated) {
-        const tmpDir = path.join(process.cwd(), 'tmp');
+        const tmpDir = require('../lib/runtime').TMP_DIR;
         if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
 
         const inputExt = isAnimated ? 'gif' : 'jpg';

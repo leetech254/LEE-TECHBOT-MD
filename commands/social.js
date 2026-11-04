@@ -64,7 +64,7 @@ async function socialCommand(sock, chatId, message) {
         const response = await retryRequest(() => axios.get(apiBase, { params: { url }, timeout: 30000, maxContentLength: 2 * 1024 * 1024 }));
         const media = collectMedia(response.data);
         if (!media.length) throw new Error('The provider returned no public media');
-        const tmpDir = path.join(process.cwd(), 'tmp');
+        const tmpDir = require('../lib/runtime').TMP_DIR;
         fs.mkdirSync(tmpDir, { recursive: true });
         for (const item of media.slice(0, 10)) {
             const mediaResponse = await retryRequest(() => axios.get(item.url, {

@@ -265,7 +265,7 @@ async function extractZip(zipPath, outDir) {
 async function updateViaZip(zipOverride) {
     const zipUrl = String(zipOverride || settings.updateZipUrl || process.env.UPDATE_ZIP_URL || DEFAULT_UPDATE_ZIP_URL).trim();
     if (!isSafeUpdateUrl(zipUrl)) throw new Error('Update URL must be a valid HTTPS URL');
-    const tmpDir = path.join(process.cwd(), 'tmp');
+    const tmpDir = require('../lib/runtime').TMP_DIR;
     const zipPath = path.join(tmpDir, `update-${process.pid}-${Date.now()}.zip`);
     const extractTo = path.join(tmpDir, `update-extract-${process.pid}-${Date.now()}`);
     fs.mkdirSync(tmpDir, { recursive: true });

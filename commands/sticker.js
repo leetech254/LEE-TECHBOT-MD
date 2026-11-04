@@ -68,7 +68,7 @@ async function stickerCommand(sock, chatId, message) {
         }
 
         // Create temp directory if it doesn't exist
-        const tmpDir = path.join(process.cwd(), 'tmp');
+        const tmpDir = require('../lib/runtime').TMP_DIR;
         if (!fs.existsSync(tmpDir)) {
             fs.mkdirSync(tmpDir, { recursive: true });
         }

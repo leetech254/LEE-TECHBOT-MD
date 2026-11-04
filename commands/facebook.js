@@ -73,7 +73,7 @@ async function facebookCommand(sock, chatId, message) {
         }
         if (!/^https?:\/\//i.test(videoUrl)) throw new Error('No public playable Facebook video was found');
 
-        const tmpDir = path.join(process.cwd(), 'tmp');
+        const tmpDir = require('../lib/runtime').TMP_DIR;
         fs.mkdirSync(tmpDir, { recursive: true });
         tempPath = path.join(tmpDir, `fb_${Date.now()}.mp4`);
         const writer = fs.createWriteStream(tempPath);

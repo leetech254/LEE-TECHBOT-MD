@@ -118,7 +118,7 @@ async function tiktokCommand(sock, chatId, message) {
         }
 
         // Prepare Temp Directory for robust downloading
-        const tmpDir = path.join(process.cwd(), 'tmp');
+        const tmpDir = require('../lib/runtime').TMP_DIR;
         if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
 
         const caption = `𝗗𝗢𝗪𝗡𝗟𝗢𝗔𝗗𝗘𝗗 𝗕𝗬 ${BOT_NAME}\n\n📝 Title: ${title}`;

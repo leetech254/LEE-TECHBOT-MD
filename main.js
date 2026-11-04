@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys'); 
-const { ensureRuntimeDirs, readJson, createMessageGuard, createHealthMetrics } = require('./lib/runtime');
+const { ensureRuntimeDirs, TMP_DIR, readJson, createMessageGuard, createHealthMetrics } = require('./lib/runtime');
 const { antiBanCommand, isAntiBanEnabled } = require('./commands/antiban');
 const { loadBotMode, saveBotMode } = require('./lib/mode');
 const { canProcessMessage } = require('./lib/modeAccess');
@@ -46,7 +46,7 @@ global.prefix = currentPrefix;
 // ==========================================
 // 2. TEMP FOLDER MANAGEMENT
 // ==========================================
-const customTemp = path.join(process.cwd(), 'temp');
+const customTemp = TMP_DIR;
 if (!fs.existsSync(customTemp)) fs.mkdirSync(customTemp, { recursive: true });
 process.env.TMPDIR = customTemp;
 process.env.TEMP = customTemp;

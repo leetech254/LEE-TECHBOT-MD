@@ -2,8 +2,10 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const { TMP_DIR } = require('./lib/runtime');
 
-const removableDirs = [path.join(process.cwd(), 'temp'), path.join(process.cwd(), 'tmp')];
+const removableDirs = [TMP_DIR, path.join(os.tmpdir(), 'lee-techbot-tmp')];
 for (const directory of removableDirs) {
   fs.mkdirSync(directory, { recursive: true });
   for (const entry of fs.readdirSync(directory)) {

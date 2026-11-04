@@ -25,7 +25,7 @@ async function audioSpeedCommand(sock, chatId, message) {
         await sock.sendMessage(chatId, { text: 'Speed must be between 0.5 and 2. Example: `.audiospeed 1.5`.' }, { quoted: message });
         return;
     }
-    const workDir = path.join(process.cwd(), 'tmp');
+    const workDir = require('../lib/runtime').TMP_DIR;
     fs.mkdirSync(workDir, { recursive: true });
     const input = path.join(workDir, `speed-${Date.now()}-${Math.random().toString(16).slice(2)}.ogg`);
     const output = `${input}.mp3`;
