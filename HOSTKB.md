@@ -52,6 +52,14 @@ The bot binds to `0.0.0.0` and uses the provider-assigned `PORT`. The pairing pa
 
 After WhatsApp is linked, the credentials are synchronized to the S3-compatible store. On later container restarts, the bot restores the session before reconnecting. Run only one HostKB instance against a given `S3_PREFIX`.
 
+You can verify the save state without exposing credentials:
+
+```text
+https://<your-hostkb-app-domain>/health
+```
+
+The JSON response includes `sessionStorage.mode`, `sessionStorage.healthy`, `sessionStorage.lastSyncAt`, and `sessionStorage.lastSyncFiles`. A correctly configured deployment reports `mode: "durable"`; after pairing, `lastSyncAt` should be populated and `lastSyncFiles` should be greater than zero. The endpoint never returns the bucket name, access key, secret, session files, QR data, or pairing code.
+
 ## 4. Troubleshooting
 
 - **The app fails with missing S3 configuration:** add `S3_BUCKET`, credentials, and the correct endpoint before restarting. This is intentional; pairing without durable storage can lose the WhatsApp session.

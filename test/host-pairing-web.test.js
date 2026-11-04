@@ -78,6 +78,15 @@ test('host pairing page starts with method selection and no QR generated', async
     assert.match(html, /credentials are saved directly on this host/);
 });
 
+test('health reports durable session-save state without exposing storage credentials', async t => {
+    const host = await withServer(t, { getStorageStatus: () => ({ enabled: true, healthy: true, lastSyncAt: '2026-11-04T20:00:00.000Z', lastSyncFiles: 4, retrying: false, error: 'secret must not appear' }) });
+    const response = await fetch(`${host.base}/health`);
+    const health = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(health.sessionStorage, { mode: 'durable', healthy: true, lastSyncAt: '2026-11-04T20:00:00.000Z', lastSyncFiles: 4, retrying: false });
+    assert.doesNotMatch(JSON.stringify(health), /secret must not appear|accessKey|secretAccessKey|S3_BUCKET/i);
+});
+
 test('pairing controls reject cross-origin browser POSTs without a key', async t => {
     const host = await withServer(t);
     const response = await fetch(`${host.base}/api/pairing/mode`, {

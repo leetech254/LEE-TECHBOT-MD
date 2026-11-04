@@ -411,6 +411,7 @@ function startHostPairingWebServer() {
     const pairing = createHostPairingServer({
         initialMode: hostWebPairingMode || '',
         getRuntime: () => hostPairingRuntime,
+        getStorageStatus: () => durableAuthStore.status?.() || {},
         onMode: async (mode) => {
             hostWebPairingMode = mode
             hostWebPairing401Retries = 0
