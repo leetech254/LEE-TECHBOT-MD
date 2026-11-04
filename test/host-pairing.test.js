@@ -67,6 +67,17 @@ test('bot supports current PaaS Node runtime and declares a public web process',
     assert.doesNotMatch(procfile, /--optimize-for-size/);
     assert.doesNotMatch(packageJson.scripts['start:optimized'], /--optimize-for-size/);
 });
+test('HostKB deployment profile uses the provider port and durable auth storage', () => {
+    const dockerfile = fs.readFileSync(path.join(__dirname, '..', 'Dockerfile'), 'utf8');
+    const guide = fs.readFileSync(path.join(__dirname, '..', 'HOSTKB.md'), 'utf8');
+    assert.match(dockerfile, /FROM node:20-/);
+    assert.match(dockerfile, /AUTH_STORE=s3/);
+    assert.match(dockerfile, /EXPOSE 3000/);
+    assert.match(dockerfile, /CMD \["npm", "start"\]/);
+    assert.match(dockerfile, /process\.env\.PORT\|\|3000/);
+    assert.match(guide, /S3_PREFIX=lee-techbot\/hostkb\/production/);
+    assert.match(guide, /provider-assigned `PORT`/);
+});
 test('Heroku health heartbeat is configurable and uses the public health route', () => {
     const source = fs.readFileSync(path.join(__dirname, '..', 'index.js'), 'utf8');
     assert.match(source, /HEALTHCHECK_AUTO_PING/);

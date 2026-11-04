@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log*
+.git
+.github
+.env
+.env.*
+!.env.example
+session
+auth
+temp
+coverage
+*.log
+data/*.json
+data/*.jsonl
+.DS_Store

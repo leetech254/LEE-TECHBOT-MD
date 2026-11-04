@@ -59,6 +59,7 @@ The bot's direct-pairing web listener binds to `0.0.0.0` and uses `PAIRING_WEB_P
 | Host type | Start configuration | Port / storage notes |
 |---|---|---|
 | Heroku | The included `Procfile` runs `web: npm start`. | Heroku injects `PORT`. Its filesystem is ephemeral, so `AUTH_DIR` will not survive dyno replacement; use durable external session storage before relying on Heroku for a long-lived linked bot. |
+| HostKB Cloud | Use the included `Dockerfile`; HostKB builds the image and runs `npm start`. | HostKB injects `PORT` and provides HTTPS/logs. Set `AUTH_STORE=s3` with a private S3-compatible bucket because container-local `AUTH_DIR` storage may not survive replacement. See [`HOSTKB.md`](HOSTKB.md). |
 | Render / Railway / Koyeb | Set the Node web-service start command to `npm start`. | Uses `PORT`; attach persistent storage for `AUTH_DIR` if the provider offers it. |
 | Bot-Hosting / panel hosts | Use `npm start` or the panel's Node startup command. | Uses `SERVER_PORT` first; expose that port through the panel's domain/proxy setting. |
 | Docker / VPS | Run `npm start` and publish the service port. | Uses `PORT` or local fallback `8000`; persist `AUTH_DIR` as a volume/disk. |
