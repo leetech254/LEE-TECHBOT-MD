@@ -7,9 +7,10 @@ const fsPromises = require('fs/promises');
 const fse = require('fs-extra');
 const path = require('path');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+const { TMP_DIR } = require('../lib/runtime');
 
-const tempDir = './temp';
-if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
+const tempDir = TMP_DIR;
+if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
 const scheduleFileDeletion = (filePath) => {
     setTimeout(async () => {

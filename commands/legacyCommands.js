@@ -65,7 +65,7 @@ async function mediaConvert(sock, chatId, message, command) {
     if (!spec || !type) {
         return reply(sock, chatId, message, `Reply to an image, video, or audio with .${command}.`);
     }
-    const tempDir = path.join(process.cwd(), 'temp');
+    const { TMP_DIR: tempDir } = require('../lib/runtime');
     fs.mkdirSync(tempDir, { recursive: true });
     const stamp = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
     const input = path.join(tempDir, `legacy_${stamp}.input`);

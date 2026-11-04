@@ -35,7 +35,7 @@ function clearDirectory(dirPath) {
 // Function to clear both tmp and temp directories
 async function clearTmpDirectory() {
     const tmpDir = path.join(process.cwd(), 'tmp');
-    const tempDir = path.join(process.cwd(), 'temp');
+    const { TMP_DIR: tempDir } = require('../lib/runtime');
     const results = [];
     results.push(clearDirectory(tmpDir));
     results.push(clearDirectory(tempDir));

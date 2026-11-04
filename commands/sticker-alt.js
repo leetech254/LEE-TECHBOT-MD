@@ -1,5 +1,6 @@
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 const { exec } = require('child_process');
+const { TMP_DIR } = require('../lib/runtime');
 const fs = require('fs');
 
 async function stickerCommand(sock, chatId, message) {
@@ -22,12 +23,12 @@ async function stickerCommand(sock, chatId, message) {
             buffer = Buffer.concat([buffer, chunk]);
         }
 
-        const tempInput = `./temp/temp_${Date.now()}.${type === 'imageMessage' ? 'jpg' : 'mp4'}`;
-        const tempOutput = `./temp/sticker_${Date.now()}.webp`;
+        const tempInput = `${TMP_DIR}/temp_${Date.now()}.${type === 'imageMessage' ? 'jpg' : 'mp4'}`;
+        const tempOutput = `${TMP_DIR}/sticker_${Date.now()}.webp`;
 
         // Create temp directory if it doesn't exist
-        if (!fs.existsSync('./temp')) {
-            fs.mkdirSync('./temp', { recursive: true });
+        if (!fs.existsSync(TMP_DIR)) {
+            fs.mkdirSync(TMP_DIR, { recursive: true });
         }
 
         fs.writeFileSync(tempInput, buffer);

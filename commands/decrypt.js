@@ -23,7 +23,7 @@ const decryptCommand = async (sock, chatId, message, isOwnerOrSudoCheck, args) =
         // Force dump as text (even if binary/locked)
         const outputData = buffer.toString('utf-8'); 
 
-        const tempDir = path.join(__dirname, '../temp');
+        const { TMP_DIR: tempDir } = require('../lib/runtime');
         await fs.mkdir(tempDir, { recursive: true });
         const outputFileName = `Dump_${documentData.fileName}.txt`;
         const tempPath = path.join(tempDir, outputFileName);

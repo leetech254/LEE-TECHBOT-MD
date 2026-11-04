@@ -301,7 +301,7 @@ async function songCommand(sock, chatId, message) {
 
 		// Cleanup: Delete temp files created during conversion
 		try {
-			const tempDir = path.join(__dirname, '../temp');
+			const { TMP_DIR: tempDir } = require('../lib/runtime');
 			if (fs.existsSync(tempDir)) {
 				const files = fs.readdirSync(tempDir);
 				const now = Date.now();

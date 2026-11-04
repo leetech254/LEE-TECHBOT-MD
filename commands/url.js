@@ -58,7 +58,7 @@ async function urlCommand(sock, chatId, message) {
             return;
         }
 
-        const tempDir = path.join(__dirname, '../temp');
+        const { TMP_DIR: tempDir } = require('../lib/runtime');
         if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
         const tempPath = path.join(tempDir, `${Date.now()}${media.ext}`);
         fs.writeFileSync(tempPath, media.buffer);
