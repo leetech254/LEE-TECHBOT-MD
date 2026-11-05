@@ -2,6 +2,7 @@ const fs = require('fs').promises;
 const { existsSync, writeFileSync } = require('fs');
 const path = require('path');
 const isOwnerOrSudo = require('../lib/isOwner');
+const { DATA_DIR } = require('../lib/runtime');
 
 const channelInfo = {
     contextInfo: {
@@ -15,13 +16,13 @@ const channelInfo = {
     }
 };
 
-const configPath = path.join(__dirname, '../data/autoStatus.json');
+const configPath = path.join(DATA_DIR, 'autoStatus.json');
 const processedStatuses = new Set(); // Prevents duplicate processing in the same session
 
 // Synchronous check only on startup
 if (!existsSync(configPath)) {
     const dir = path.dirname(configPath);
-    if (!existsSync(dir)) writeFileSync(dir, JSON.stringify({})); 
+    if (!existsSync(dir)) require('fs').mkdirSync(dir, { recursive: true });
     writeFileSync(configPath, JSON.stringify({ 
         enabled: false, 
         reactOn: false,

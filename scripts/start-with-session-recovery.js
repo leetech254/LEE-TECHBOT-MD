@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const entry = path.resolve(process.env.BOT_ENTRY || path.join(process.cwd(), 'index.js'));
-const authDir = path.resolve(process.env.AUTH_DIR || path.join(process.cwd(), 'session'));
+const authDir = path.resolve(process.env.AUTH_DIR || (process.env.PORT ? '/app/auth' : path.join(process.cwd(), 'session')));
 const badMacPattern = /bad mac|verif(?:y|ication)mac|failed to decrypt|decrypt.*session|failed to decrypt message with any known session|over\s+\d+\s+messages?\s+into\s+the\s+future/i;
 // Never destroy a paired session automatically. Set SESSION_RECOVERY_RESET=true
 // only for an intentional manual relink after backing up the auth directory.

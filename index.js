@@ -215,7 +215,7 @@ let owner = readJson('./data/owner.json', { owner: settings.ownerNumber || '' })
 
 global.botname = "LEE TECH BOT"
 global.themeemoji = "•"
-const authDir = process.env.AUTH_DIR || './session'
+const authDir = process.env.AUTH_DIR || (process.env.PORT ? '/app/auth' : './session')
 let durableAuthStore
 let durableAuthStoreConfigError = null
 try {
