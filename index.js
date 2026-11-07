@@ -944,6 +944,7 @@ async function startXeonBotInc() {
                     buttons: [
                         { buttonId: `${commandPrefix}ping`, buttonText: { displayText: '⚡ Ping' }, type: 1 },
                         { buttonId: `${commandPrefix}github`, buttonText: { displayText: '🌐 GitHub' }, type: 1 },
+                        { buttonId: `${commandPrefix}menu`, buttonText: { displayText: '📋 Menu' }, type: 1 },
                     ],
                     headerType: 1,
                 };

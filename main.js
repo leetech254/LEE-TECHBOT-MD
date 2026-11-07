@@ -312,7 +312,8 @@ async function handleMessages(sock, messageUpdate, printLog) {
             const developerButtonCommands = {
                 tools_health: '.health',
                 tools_settings: '.settings',
-                tools_update: '.update'
+                tools_update: '.update',
+                tools_menu: '.menu'
             };
             if (developerButtonCommands[buttonId]) {
                 // Re-enter the normal router so existing owner checks remain

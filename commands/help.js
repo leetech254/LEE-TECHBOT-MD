@@ -326,7 +326,8 @@ function developerButtons() {
     return [
         { buttonId: 'tools_health', buttonText: { displayText: 'Health' }, type: 1 },
         { buttonId: 'tools_settings', buttonText: { displayText: 'Settings' }, type: 1 },
-        { buttonId: 'tools_update', buttonText: { displayText: 'Update' }, type: 1 }
+        { buttonId: 'tools_update', buttonText: { displayText: 'Update' }, type: 1 },
+        { buttonId: 'tools_menu', buttonText: { displayText: '📋 Menu' }, type: 1 }
     ];
 }
 
