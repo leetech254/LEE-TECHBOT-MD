@@ -29,7 +29,7 @@ RUN chmod 0755 /usr/local/bin/ffmpeg /usr/local/bin/ffprobe \
     && chown -R node:node /app/auth /app/data /app/temp
 
 COPY package*.json ./
-RUN npm ci --omit=dev --no-audit --no-fund \
+RUN npm install --omit=dev --no-audit --no-fund \
     && npm cache clean --force
 COPY --chown=node:node . .
 
