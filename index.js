@@ -934,27 +934,46 @@ async function startXeonBotInc() {
                 const botNumber = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net';
                 const commandPrefix = global.prefix === 'none' ? '.' : (global.prefix || '.');
                 const displayedPrefix = global.prefix === 'none' ? 'none (use .)' : commandPrefix;
-                void XeonBotInc.sendMessage(botNumber, {
-                    text: `🔄 *LEE TECH BOT RECONNECTED*\n\n` +
-                        `Status: *Online and ready*\n` +
-                        `Prefix: *${displayedPrefix}*\n` +
-                        `The bot is back online after a temporary connection reset.`,
+                const reconnectText = `🔄 *LEE TECH BOT RECONNECTED*\n\n` +
+                    `Status: *Online and ready*\n` +
+                    `Prefix: *${displayedPrefix}*\n` +
+                    `The bot is back online after a temporary connection reset.`;
+                const reconnectPayload = {
+                    text: reconnectText,
                     footer: `LEE TECH BOT • ${settings.version}`,
                     buttons: [
                         { buttonId: `${commandPrefix}ping`, buttonText: { displayText: '⚡ Ping' }, type: 1 },
-                        { buttonId: `${commandPrefix}github`, buttonText: { displayText: '⌘ GitHub' }, type: 1 },
+                        { buttonId: `${commandPrefix}github`, buttonText: { displayText: '🌐 GitHub' }, type: 1 },
                     ],
                     headerType: 1,
-                }).then(() => {
-                    fs.mkdirSync(path.dirname(connectionNoticePath), { recursive: true })
-                    fs.writeFileSync(connectionNoticePath, JSON.stringify({
-                        ...connectionNoticeState,
-                        sent: true,
-                        lastReconnectNoticeAt,
-                    }))
-                }).catch(error => {
-                    console.error('Error sending reconnect notice:', error.message || error);
-                });
+                };
+                void (async () => {
+                    let sent = false;
+                    try {
+                        await XeonBotInc.sendMessage(botNumber, reconnectPayload);
+                        sent = true;
+                    } catch (error) {
+                        console.warn('Reconnect buttons unavailable; sending plain-text notice:', error.message || error);
+                        try {
+                            await XeonBotInc.sendMessage(botNumber, { text: reconnectText });
+                            sent = true;
+                        } catch (fallbackError) {
+                            console.error('Error sending reconnect notice:', fallbackError.message || fallbackError);
+                        }
+                    }
+                    if (sent) {
+                        try {
+                            fs.mkdirSync(path.dirname(connectionNoticePath), { recursive: true })
+                            fs.writeFileSync(connectionNoticePath, JSON.stringify({
+                                ...connectionNoticeState,
+                                sent: true,
+                                lastReconnectNoticeAt,
+                            }))
+                        } catch (error) {
+                            console.warn('Could not persist reconnect notice state:', error.message || error);
+                        }
+                    }
+                })();
             }
 
             if (pendingRestartNotice?.targetJid) {
