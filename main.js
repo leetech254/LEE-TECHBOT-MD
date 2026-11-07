@@ -262,10 +262,14 @@ Object.defineProperty(channelInfo, 'contextInfo', {
 async function handleMessages(sock, messageUpdate, printLog) {
     try {
         const { messages, type } = messageUpdate || {};
-        if (type !== 'notify') return;
+        if (type !== 'notify' && type !== 'append') return;
 
         const message = Array.isArray(messages) ? messages[0] : null;
         if (!message?.message) return;
+        if (type === 'append') {
+            const timestampMs = Number(message.messageTimestamp || 0) * 1000;
+            if (timestampMs && Date.now() - timestampMs > 2 * 60 * 1000) return;
+        }
         if (typeof message.key?.remoteJid !== 'string' || !message.key.remoteJid) return;
         if (messageGuard.isDuplicate(message.key?.id)) return;
         healthMetrics.recordMessage();

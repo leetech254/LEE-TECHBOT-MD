@@ -703,7 +703,6 @@ async function startXeonBotInc() {
     XeonBotInc.ev.on('messages.upsert', async chatUpdate => {
         try {
             const messages = Array.isArray(chatUpdate?.messages) ? chatUpdate.messages : []
-            const mek = messages[0]
             // Do not process encrypted updates while Baileys is still opening
             // or handing off a reconnecting socket. Processing them too early
             // can create duplicate replies and WhatsApp's "waiting for this
@@ -716,35 +715,34 @@ async function startXeonBotInc() {
                         .catch(error => console.error('[channel-auto] Channel post reaction failed:', error.message || error))
                 }
             }
-            if (!mek?.message) return
-            if (String(mek.key?.remoteJid || '').endsWith('@newsletter')) return
-            const protocol = mek.message.protocolMessage
-            if (protocol?.type === 0 && protocol.key?.id) {
-                rememberDeletedMessage(protocol.key.remoteJid || mek.key?.remoteJid, protocol.key.id)
-            }
-            mek.message = (Object.keys(mek.message)[0] === 'ephemeralMessage') ? mek.message.ephemeralMessage.message : mek.message
-            if (mek.key && mek.key.remoteJid === 'status@broadcast') {
-                await handleStatus(XeonBotInc, chatUpdate);
-                return;
-            }
-            // Private/public/group/DM access is enforced by main.js through the
-            // persisted mode and linked owner/sudo identity. Do not duplicate
-            // that check here: XeonBotInc.public is not a synchronized setting
-            // and an early gate incorrectly drops authorized private messages.
-            if (mek.key.id.startsWith('BAE5') && mek.key.id.length === 16) return
-
-            try {
-                await handleMessages(XeonBotInc, chatUpdate, true)
-            } catch (err) {
-                if (isSignalDecryptError(err)) {
-                    logDecryptWarningOnce(mek.key?.id, err)
-                    scheduleSignalSessionRecovery(err)
-                    return
+            for (const mek of messages) {
+                if (!mek?.message) continue
+                if (String(mek.key?.remoteJid || '').endsWith('@newsletter')) continue
+                const protocol = mek.message.protocolMessage
+                if (protocol?.type === 0 && protocol.key?.id) {
+                    rememberDeletedMessage(protocol.key.remoteJid || mek.key?.remoteJid, protocol.key.id)
                 }
-                console.error("Error in handleMessages:", err)
-                // Only try to send error message if we have a valid chatId
-                if (mek.key && mek.key.remoteJid) {
-                    await XeonBotInc.sendMessage(mek.key.remoteJid, {
+                mek.message = (Object.keys(mek.message)[0] === 'ephemeralMessage') ? mek.message.ephemeralMessage.message : mek.message
+                if (mek.key && mek.key.remoteJid === 'status@broadcast') {
+                    await handleStatus(XeonBotInc, { ...chatUpdate, messages: [mek] })
+                    continue
+                }
+                // Private/public/group/DM access is enforced by main.js through
+                // the persisted mode and linked owner/sudo identity.
+                if (mek.key?.id?.startsWith('BAE5') && mek.key.id.length === 16) continue
+
+                try {
+                    await handleMessages(XeonBotInc, { ...chatUpdate, messages: [mek] }, true)
+                } catch (err) {
+                    if (isSignalDecryptError(err)) {
+                        logDecryptWarningOnce(mek.key?.id, err)
+                        scheduleSignalSessionRecovery(err)
+                        continue
+                    }
+                    console.error("Error in handleMessages:", err)
+                    // Only try to send error message if we have a valid chatId
+                    if (mek.key && mek.key.remoteJid) {
+                        await XeonBotInc.sendMessage(mek.key.remoteJid, {
                         text: '❌ An error occurred while processing your message.',
                         contextInfo: {
                             forwardingScore: 1,
@@ -755,7 +753,8 @@ async function startXeonBotInc() {
                                 serverMessageId: -1
                             }
                         }
-                    }).catch(console.error);
+                        }).catch(console.error);
+                    }
                 }
             }
         } catch (err) {
