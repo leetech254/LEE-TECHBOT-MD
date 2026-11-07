@@ -87,7 +87,10 @@ let reconnectTimer = null
 let socketStartInFlight = false
 let selfChatWarmupUntil = 0
 const connectionNoticePath = path.join(process.env.AUTH_DIR || './session', '.connection-notice.json')
-let hasAnnouncedConnection = Boolean(readJson(connectionNoticePath, {}).sent)
+const connectionNoticeState = readJson(connectionNoticePath, {})
+let hasAnnouncedConnection = Boolean(connectionNoticeState.sent)
+let lastReconnectNoticeAt = Number(connectionNoticeState.lastReconnectNoticeAt) || 0
+const reconnectNoticeCooldownMs = Math.max(0, Number(process.env.RECONNECT_NOTICE_COOLDOWN_MS) || 6 * 60 * 60 * 1000)
 let reconnectNoticePending = false
 let lastDisconnectSummary = ''
 const pendingRestartNoticePath = path.join(process.cwd(), 'data', '.pending-restart-notice.json')
@@ -926,22 +929,23 @@ async function startXeonBotInc() {
                     console.error('Error sending initial connection message:', error.message)
                 }
             } else if (reconnectNoticePending) {
-                try {
-                    const botNumber = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net';
-                    const authStatus = durableAuthStore.status?.() || {};
-                    await XeonBotInc.sendMessage(botNumber, {
-                        text: `🔄 *LEE TECH BOT RECONNECTED*\n\n` +
-                            `┃ Status: *Online again*\n` +
-                            `┃ Time: ${new Date().toLocaleString()}\n` +
-                            `┃ Cause: ${lastDisconnectSummary || 'temporary WhatsApp connection reset'}\n` +
-                            `┃ Session: *${authStatus.enabled ? 'Preserved in durable storage' : 'Preserved locally'}*\n` +
-                            `┃ Backup: *${authStatus.lastSyncAt ? 'Last backup available' : authStatus.retrying ? 'Retrying backup' : 'Pending'}*\n\n` +
-                            `The bot is online and ready.`,
-                    });
-                    reconnectNoticePending = false;
-                } catch (error) {
+                reconnectNoticePending = false;
+                lastReconnectNoticeAt = Date.now();
+                const botNumber = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net';
+                void XeonBotInc.sendMessage(botNumber, {
+                    text: `🔄 *LEE TECH BOT RECONNECTED*\n\n` +
+                        `Status: *Online and ready*\n` +
+                        `The bot is back online after a temporary connection reset.`,
+                }).then(() => {
+                    fs.mkdirSync(path.dirname(connectionNoticePath), { recursive: true })
+                    fs.writeFileSync(connectionNoticePath, JSON.stringify({
+                        ...connectionNoticeState,
+                        sent: true,
+                        lastReconnectNoticeAt,
+                    }))
+                }).catch(error => {
                     console.error('Error sending reconnect notice:', error.message || error);
-                }
+                });
             }
 
             if (pendingRestartNotice?.targetJid) {
@@ -984,7 +988,8 @@ async function startXeonBotInc() {
             const disconnectText = String(lastDisconnect?.error?.message || lastDisconnect?.error || '')
             const needsFreshPairing = statusCode === DisconnectReason.loggedOut || statusCode === 401
             lastDisconnectSummary = statusCode ? `WhatsApp status ${statusCode}` : 'temporary WhatsApp connection reset'
-            if (XeonBotInc.authState?.creds?.registered && !needsFreshPairing) reconnectNoticePending = true
+            const reconnectNoticeDue = Date.now() - lastReconnectNoticeAt >= reconnectNoticeCooldownMs
+            if (XeonBotInc.authState?.creds?.registered && !needsFreshPairing && reconnectNoticeDue) reconnectNoticePending = true
             hostPairingRuntime.connection = 'close'
             hostPairingRuntime.connected = false
             hostPairingRuntime.ready = false
