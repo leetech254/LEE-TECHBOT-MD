@@ -8,9 +8,10 @@ const http = require('http');
 const https = require('https');
 const settings = require('../settings');
 const isOwnerOrSudo = require('../lib/isOwner');
+const { DATA_DIR, TMP_DIR } = require('../lib/runtime');
 
 const execFileAsync = promisify(execFile);
-const DEFAULT_UPDATE_ZIP_URL = 'https://github.com/networkserver06-commits/LEE-TECHBOT-MD/archive/refs/heads/main.zip';
+const DEFAULT_UPDATE_ZIP_URL = 'https://github.com/leetech254/LEE-TECHBOT-MD/archive/refs/heads/main.zip';
 const MAX_UPDATE_BYTES = 50 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 45_000;
 const MAX_REDIRECTS = 5;
@@ -19,9 +20,10 @@ const PRESERVED_NAMES = new Set([
     'tmp', 'temp', 'data', 'baileys_store.json', 'package-lock.json'
 ]);
 const PRESERVED_PATHS = ['.env', 'env', 'config.env', 'data/', 'session/', 'sessions/', 'auth/', 'auth_info/', 'package-lock.json'];
+let updateInFlight = false;
 
 function writeRestartNotice(targetJid, version, revision) {
-    const noticePath = path.join(process.cwd(), 'data', '.pending-restart-notice.json');
+    const noticePath = path.join(DATA_DIR, '.pending-restart-notice.json');
     fs.mkdirSync(path.dirname(noticePath), { recursive: true });
     fs.writeFileSync(noticePath, JSON.stringify({
         targetJid: String(targetJid || ''),
@@ -265,7 +267,7 @@ async function extractZip(zipPath, outDir) {
 async function updateViaZip(zipOverride) {
     const zipUrl = String(zipOverride || settings.updateZipUrl || process.env.UPDATE_ZIP_URL || DEFAULT_UPDATE_ZIP_URL).trim();
     if (!isSafeUpdateUrl(zipUrl)) throw new Error('Update URL must be a valid HTTPS URL');
-    const tmpDir = require('../lib/runtime').TMP_DIR;
+    const tmpDir = TMP_DIR;
     const zipPath = path.join(tmpDir, `update-${process.pid}-${Date.now()}.zip`);
     const extractTo = path.join(tmpDir, `update-extract-${process.pid}-${Date.now()}`);
     fs.mkdirSync(tmpDir, { recursive: true });
@@ -334,8 +336,15 @@ async function updateCommand(sock, chatId, message, zipOverride) {
     const senderId = message.key.participant || message.key.remoteJid;
     const owner = await isOwnerOrSudo(senderId, sock, chatId);
     if (!message.key.fromMe && !owner) { await sock.sendMessage(chatId, { text: 'Only bot owner or sudo can use .update' }, { quoted: message }); return; }
+    if (updateInFlight) {
+        await sock.sendMessage(chatId, { text: '⏳ An update is already running. Please wait for it to finish.' }, { quoted: message });
+        return;
+    }
+    updateInFlight = true;
     try {
-        await sock.sendMessage(chatId, { text: '🔄 *Update started*\nChecking the latest repository revision…' }, { quoted: message });
+        const storage = global.durableAuthStore?.status?.() || {};
+        const storageLabel = storage.enabled ? 'S3 backup' : storage.localPersistent ? 'panel local storage' : storage.localWritable ? 'local storage' : 'storage unavailable';
+        await sock.sendMessage(chatId, { text: `🔄 *Update started*\nChecking the latest Lee Tech revision…\nSession storage: *${storageLabel}*` }, { quoted: message });
         let result;
         if (await hasGitRepo()) {
             try { result = await updateViaGit(); }
@@ -343,6 +352,7 @@ async function updateCommand(sock, chatId, message, zipOverride) {
                 if (error.code === 'UPDATE_DIRTY_TREE') {
                     console.warn('[update] Update refused because the working tree contains source changes:', error.message);
                     await sock.sendMessage(chatId, { text: `⛔ Update stopped before changing files.\n${error.message}` }, { quoted: message });
+                    updateInFlight = false;
                     return;
                 }
                 console.warn('[update] Git update unavailable:', error.message);
@@ -352,13 +362,14 @@ async function updateCommand(sock, chatId, message, zipOverride) {
             await sock.sendMessage(chatId, { text: '📦 Git update unavailable; using the safe HTTPS archive fallback…' }, { quoted: message }).catch(() => {});
             result = await updateViaZip(zipOverride);
         }
-        if (result.alreadyUpToDate) { await sock.sendMessage(chatId, { text: `ℹ️ Already up to date.\nRevision: *${result.newRev.slice(0, 12)}*\nNo files changed and no restart was needed.` }, { quoted: message }); return; }
+        if (result.alreadyUpToDate) { await sock.sendMessage(chatId, { text: `ℹ️ Already up to date.\nRevision: *${result.newRev.slice(0, 12)}*\nNo files changed and no restart was needed.` }, { quoted: message }); updateInFlight = false; return; }
         await sock.sendMessage(chatId, { text: '✅ Source updated. Installing dependencies and validating the installation…' }, { quoted: message });
-        await shellCommand('npm', ['install', '--no-audit', '--no-fund', '--ignore-scripts']);
+        await shellCommand('npm', ['install', '--omit=dev', '--no-audit', '--no-fund', '--ignore-scripts']);
         const packagePath = path.join(process.cwd(), 'package.json');
         let version = settings.version || 'unknown';
         try { version = JSON.parse(fs.readFileSync(packagePath, 'utf8')).version || version; } catch {}
-        await sock.sendMessage(chatId, { text: `✅ *Update completed*\nVersion: *${version}*\nRevision: *${result.newRev ? result.newRev.slice(0, 12) : 'archive'}*\nRestarting now; send *.ping* after reconnect.` }, { quoted: message });
+        const panelRestart = usesManagedProcessSupervisor(process.env) || String(process.env.RESTART_MODE || '').toLowerCase() === 'panel';
+        await sock.sendMessage(chatId, { text: `✅ *Update completed*\nVersion: *${version}*\nRevision: *${result.newRev ? result.newRev.slice(0, 12) : 'archive'}*\n${panelRestart ? 'The hosting panel will restart the bot automatically.' : 'Restarting now; send *.ping* after reconnect.'}` }, { quoted: message });
         writeRestartNotice(chatId, version, result.newRev ? result.newRev.slice(0, 12) : 'archive');
         // Give Baileys time to flush the final status message before the
         // socket handoff. Restarting immediately can leave that message in
@@ -368,6 +379,8 @@ async function updateCommand(sock, chatId, message, zipOverride) {
     } catch (error) {
         console.error('[update] failed:', error);
         await sock.sendMessage(chatId, { text: `❌ Update failed safely:\n${String(error.message || error).slice(0, 800)}` }, { quoted: message });
+    } finally {
+        updateInFlight = false;
     }
 }
 

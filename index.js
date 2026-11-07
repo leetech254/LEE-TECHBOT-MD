@@ -46,7 +46,7 @@ const { join } = require('path')
 
 // Import lightweight store
 const store = require('./lib/lightweight_store')
-const { ensureRuntimeDirs, readJson, atomicWriteJson } = require('./lib/runtime')
+const { DATA_DIR, ensureRuntimeDirs, readJson, atomicWriteJson } = require('./lib/runtime')
 const { normalizeWhatsAppNumber } = require('./lib/phone')
 const { restoreSessionBundle } = require('./lib/sessionBundle')
 const { createDurableAuthStore } = require('./lib/durableAuthStore')
@@ -94,7 +94,7 @@ let lastReconnectNoticeAt = Number(connectionNoticeState.lastReconnectNoticeAt) 
 const reconnectNoticeCooldownMs = Math.max(0, Number(process.env.RECONNECT_NOTICE_COOLDOWN_MS) || 6 * 60 * 60 * 1000)
 let reconnectNoticePending = false
 let lastDisconnectSummary = ''
-const pendingRestartNoticePath = path.join(process.cwd(), 'data', '.pending-restart-notice.json')
+const pendingRestartNoticePath = path.join(DATA_DIR, '.pending-restart-notice.json')
 let pendingRestartNotice = readJson(pendingRestartNoticePath, {})
 const decryptWarningCache = new Map()
 const signalDecryptFailures = []
@@ -225,8 +225,9 @@ let durableAuthStoreConfigError = null
 try {
     durableAuthStore = createDurableAuthStore({ authDir })
     if (durableAuthStore.enabled) console.log('[auth-store] S3-compatible durable session storage enabled.')
+    else if (durableAuthStore.status?.().localPersistent) console.log('[auth-store] Panel-local persistent session storage detected.')
     else if (process.env.DYNO || process.env.HEROKU_APP_NAME || process.env.PORT || process.env.P_SERVER_UUID || process.env.PTERODACTYL_SERVER_UUID) {
-        console.warn('[auth-store] Durable session storage is not configured on this deployment. Provision Bucketeer or set AUTH_STORE=s3 with S3_BUCKET and credentials before pairing.')
+        console.warn('[auth-store] No writable persistent auth storage detected. Configure a panel volume or AUTH_STORE=s3 before pairing.')
     }
 } catch (error) {
     console.error(`[auth-store] Configuration error: ${error.message || error}`)
@@ -915,13 +916,20 @@ async function startXeonBotInc() {
                 try {
                     const botNumber = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net';
                     const authStatus = durableAuthStore.status?.() || {};
+                    const sessionLabel = authStatus.enabled
+                        ? 'S3 backup enabled'
+                        : authStatus.localPersistent
+                            ? 'Panel local storage'
+                            : authStatus.localWritable
+                                ? 'Local storage'
+                                : 'Storage unavailable';
                     await XeonBotInc.sendMessage(botNumber, {
                         text: `✅ *LEE TECH BOT ONLINE*\n\n` +
                             `┃ Status: *Online and ready*\n` +
                             `┃ Time: ${new Date().toLocaleString()}\n` +
                             `┃ Version: *${settings.version}*\n` +
-                            `┃ Session: *${authStatus.enabled ? 'Durable backup enabled' : 'Local storage only'}*\n` +
-                            `┃ Backup: *${authStatus.lastSyncAt ? 'Saved' : authStatus.enabled ? 'Starting' : authStatus.reason ? 'Not configured: add Bucketeer' : 'Not configured'}*\n\n` +
+                            `┃ Session: *${sessionLabel}*\n` +
+                            `┃ Backup: *${authStatus.enabled ? (authStatus.lastSyncAt ? 'Saved' : 'Starting') : authStatus.localPersistent ? 'Panel volume' : 'Not configured'}*\n\n` +
                             `Use *.menu* for commands and *.ping* to check response speed.`,
                     });
                     fs.mkdirSync(path.dirname(connectionNoticePath), { recursive: true })

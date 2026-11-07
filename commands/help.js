@@ -126,8 +126,12 @@ function liveMenuState(context = {}) {
     const durableStatus = global.durableAuthStore?.status?.();
     const durableEnabled = durableStatus ? Boolean(durableStatus.enabled) : (String(process.env.AUTH_STORE || '').toLowerCase() === 's3' || process.env.BUCKETEER_BUCKET_NAME);
     const sessionLabel = durableEnabled
-        ? (durableStatus?.retrying ? 'Durable backup retrying' : durableStatus?.lastSyncAt ? 'Durable backup saved' : 'Durable backup enabled')
-        : 'Local storage only';
+        ? (durableStatus?.retrying ? 'S3 backup retrying' : durableStatus?.lastSyncAt ? 'S3 backup saved' : 'S3 backup enabled')
+        : durableStatus?.localPersistent
+            ? 'Panel local storage saved'
+            : durableStatus?.localWritable
+                ? 'Local storage available'
+                : 'Storage unavailable';
     return {
         user,
         userNumber: configuredNumber || (senderNumber.length < 15 ? senderNumber : ''),

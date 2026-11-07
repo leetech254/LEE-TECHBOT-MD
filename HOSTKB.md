@@ -17,7 +17,7 @@ HostKB supplies the public HTTPS URL and the runtime `PORT`. Do not hard-code th
 
 ## 2. Configure environment variables
 
-The HostKB Docker image is configured for local session storage. Attach a HostKB persistent, **read-write** volume to `/app/auth` before the first deploy. The bot writes the WhatsApp credentials directly to that volume, so no external database is required.
+The HostKB Docker image is configured for local session storage. Attach a HostKB persistent volume to `/app/auth` in **read-write** mode before the first deploy. The bot writes the WhatsApp credentials directly to that volume, so no external database is required.
 
 Set these variables in HostKB’s application environment settings:
 
@@ -58,7 +58,7 @@ You can verify the save state without exposing credentials:
 https://<your-hostkb-app-domain>/health
 ```
 
-The JSON response includes `sessionStorage.mode`, `sessionStorage.healthy`, `sessionStorage.lastSyncAt`, and `sessionStorage.lastSyncFiles`. The local-volume profile reports `mode: "local"`; confirm that the auth directory is mounted to the persistent volume and that the HostKB volume remains attached after restart. The endpoint never returns session files, QR data, or pairing codes.
+The JSON response includes `sessionStorage.mode`, `sessionStorage.healthy`, `sessionStorage.lastSyncAt`, and `sessionStorage.lastSyncFiles`. The local-volume profile reports `mode: "local"` (and the richer runtime status identifies a detected panel volume as `panel-local`); confirm that the auth directory is mounted to the persistent volume and that the HostKB volume remains attached after restart. The endpoint never returns session files, QR data, or pairing codes.
 
 ## 4. Troubleshooting
 
