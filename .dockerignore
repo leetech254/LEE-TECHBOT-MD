@@ -9,6 +9,9 @@ session
 auth
 temp
 coverage
+test
+tests
+*.md
 *.log
 data/*.json
 data/*.jsonl

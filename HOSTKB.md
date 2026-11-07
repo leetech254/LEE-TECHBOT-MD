@@ -1,6 +1,6 @@
 # Deploy LEE TECHBOT on HostKB Cloud
 
-HostKB deploys this repository as a Docker-based Node.js web application. The included `Dockerfile` installs Node.js 20, FFmpeg, production dependencies, and starts the bot with `npm start`.
+HostKB deploys this repository as a Docker-based Node.js web application. The included multi-stage `Dockerfile` uses Node.js 20 and downloads a self-contained static FFmpeg/FFprobe bundle; it does not run `apt-get` in the final image.
 
 ## 1. Connect the repository
 
@@ -10,14 +10,14 @@ In HostKB Cloud:
 2. Create an application from a Git repository.
 3. Connect `https://github.com/leetech254/LEE-TECHBOT-MD`.
 4. Select the `main` branch.
-5. Use the repository Dockerfile and expose the application HTTP port.
+5. Select **Docker/Dockerfile**, not Railpack, and expose the application HTTP port.
 6. Enable auto-deploy on push if desired.
 
 HostKB supplies the public HTTPS URL and the runtime `PORT`. Do not hard-code the public URL or replace the start command with a second bot process.
 
 ## 2. Configure environment variables
 
-The HostKB Docker image is configured for local session storage. Attach a HostKB persistent volume to `/app/auth` before the first deploy. The bot writes the WhatsApp credentials directly to that volume, so no external database is required.
+The HostKB Docker image is configured for local session storage. Attach a HostKB persistent, **read-write** volume to `/app/auth` before the first deploy. The bot writes the WhatsApp credentials directly to that volume, so no external database is required.
 
 Set these variables in HostKB’s application environment settings:
 
@@ -27,7 +27,7 @@ AUTH_DIR=/app/auth
 PAIRING_WEB_ENABLED=auto
 ```
 
-The included Dockerfile declares `/app/auth` as a volume. If HostKB exposes a volume or persistent-disk setting, attach it to exactly that path and keep it when rebuilding or redeploying. Do not mount an empty replacement volume after pairing.
+The included Dockerfile declares `/app/auth` as a volume. If HostKB exposes a volume or persistent-disk setting, attach it to exactly that path, choose read-write mode, and keep it when rebuilding or redeploying. Do not mount an empty replacement volume after pairing.
 
 Optional variables include `OWNER_NUMBER`, `BOT_MODE`, `PREFIX`, `PAIRING_WEB_PUBLIC_URL`, `HEALTHCHECK_URL`, and `HEALTHCHECK_AUTO_PING`. HostKB already keeps the service reachable through its application URL, so an external heartbeat is normally unnecessary; leave `HEALTHCHECK_AUTO_PING` unset unless you explicitly want one.
 
@@ -55,6 +55,8 @@ The JSON response includes `sessionStorage.mode`, `sessionStorage.healthy`, `ses
 ## 4. Troubleshooting
 
 - **The app loses its session after redeploy:** confirm that `/app/auth` is a HostKB persistent volume, not ordinary container storage, and that the same volume remains attached.
+- **Build fails while unpacking FFmpeg packages:** confirm the deployment is using the current multi-stage Dockerfile from `main`; it downloads static binaries and should not show a long Debian `apt-get install ffmpeg` step.
+- **Runtime shows `EACCES: mkdir '/app/auth/data'`:** the app is running with a non-writable auth mount. Change the HostKB mount to read-write and redeploy. Do not switch to Railpack, which does not apply the Dockerfile’s volume ownership setup.
 - **Health check fails:** confirm the HostKB app is configured as a web application and that the container is allowed to receive the injected `PORT`. Do not start a second process with another command.
 - **Pairing page is unavailable:** open the application domain, not the HostKB dashboard URL, and append `/pairing`.
 - **The `/health` response only proves that the process is alive:** local session durability depends on HostKB retaining the `/app/auth` volume across replacement.
