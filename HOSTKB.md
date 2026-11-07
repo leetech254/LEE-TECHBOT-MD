@@ -31,6 +31,14 @@ The included Dockerfile declares `/app/auth` as a volume. If HostKB exposes a vo
 
 Optional variables include `OWNER_NUMBER`, `BOT_MODE`, `PREFIX`, `PAIRING_WEB_PUBLIC_URL`, `HEALTHCHECK_URL`, and `HEALTHCHECK_AUTO_PING`. HostKB already keeps the service reachable through its application URL, so an external heartbeat is normally unnecessary; leave `HEALTHCHECK_AUTO_PING` unset unless you explicitly want one.
 
+Interactive shortcut buttons use the defaults **Ping**, **GitHub**, and **Menu**. You can replace them with up to three validated shortcuts using JSON. Commands are routed through the normal command handler, so existing permissions and bot mode restrictions still apply:
+
+```env
+MENU_SHORTCUTS=[{"label":"📊 Health","command":"health"},{"label":"🎨 Menu style","command":"menustyle"},{"label":"📋 Menu","command":"menu"}]
+```
+
+Arguments are supported, for example `{"label":"✨ Premium menu","command":"menustyle premium"}`. Do not put secrets in this variable. Owners can also use `menustyle` to open interactive style choices; the full command remains available for `minimal`, `terminal`, and `royal`.
+
 ## 3. Build and pair
 
 Build and deploy the application. When the status is **Running**, open:

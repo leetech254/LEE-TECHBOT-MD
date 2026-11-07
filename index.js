@@ -53,6 +53,7 @@ const { createDurableAuthStore } = require('./lib/durableAuthStore')
 const { resolveHostPairingMode, resolveHostMenuChoice, resolvePairingWebStartupMode, resolveHostPairingPort, shouldAutoStartPairingWeb, renderTerminalQr } = require('./lib/hostPairing')
 const { CHANNEL_LINKS, createChannelAutomation } = require('./lib/channelAutomation')
 const { createHostPairingServer } = require('./lib/hostPairingWeb')
+const { activePrefix, menuShortcutButtons } = require('./lib/menuShortcuts')
 const selfChatModule = require('./lib/selfChat')
 const { selfChatSendOptions, isSelfChat, createSelfChatSendQueue } = selfChatModule
 const enqueueSelfChatSend = typeof createSelfChatSendQueue === 'function'
@@ -932,7 +933,7 @@ async function startXeonBotInc() {
                 reconnectNoticePending = false;
                 lastReconnectNoticeAt = Date.now();
                 const botNumber = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net';
-                const commandPrefix = global.prefix === 'none' ? '.' : (global.prefix || '.');
+                const commandPrefix = activePrefix(global.prefix);
                 const displayedPrefix = global.prefix === 'none' ? 'none (use .)' : commandPrefix;
                 const reconnectText = `🔄 *LEE TECH BOT RECONNECTED*\n\n` +
                     `Status: *Online and ready*\n` +
@@ -941,11 +942,7 @@ async function startXeonBotInc() {
                 const reconnectPayload = {
                     text: reconnectText,
                     footer: `LEE TECH BOT • ${settings.version}`,
-                    buttons: [
-                        { buttonId: `${commandPrefix}ping`, buttonText: { displayText: '⚡ Ping' }, type: 1 },
-                        { buttonId: `${commandPrefix}github`, buttonText: { displayText: '🌐 GitHub' }, type: 1 },
-                        { buttonId: `${commandPrefix}menu`, buttonText: { displayText: '📋 Menu' }, type: 1 },
-                    ],
+                    buttons: menuShortcutButtons(global.prefix),
                     headerType: 1,
                 };
                 void (async () => {

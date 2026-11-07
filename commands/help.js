@@ -7,6 +7,7 @@ const { MENU_CATEGORIES, getCategory, allCommands } = require('../lib/menuCatalo
 const { loadBotMode } = require('../lib/mode');
 const { loadIdentity } = require('../lib/identity');
 const { normalizeWhatsAppNumber } = require('../lib/phone');
+const { menuShortcutButtons } = require('../lib/menuShortcuts');
 
 const menuImagePath = path.join(process.cwd(), 'menu.jpg');
 const menuSettingsPath = path.join(process.cwd(), 'data', 'menuSettings.json');
@@ -367,8 +368,32 @@ async function helpCommand(sock, chatId, message) {
                 console.warn('[menu] Buttons unavailable; using text-only fallback:', buttonError.message || buttonError);
             }
         }
-        if (image) return await sock.sendMessage(chatId, { image, caption: helpMessage }, { quoted: message });
-        return await sock.sendMessage(chatId, { text: helpMessage }, { quoted: message });
+        const shortcutButtons = menuShortcutButtons(global.prefix);
+        if (image) {
+            await sock.sendMessage(chatId, { image, caption: helpMessage }, { quoted: message });
+            try {
+                return await sock.sendMessage(chatId, {
+                    text: '⚡ *QUICK ACTIONS*\nChoose a shortcut:',
+                    footer: 'LEE TECH Interactive Menu',
+                    buttons: shortcutButtons,
+                    headerType: 1,
+                }, { quoted: message });
+            } catch (buttonError) {
+                console.warn('[menu] Shortcut buttons unavailable:', buttonError.message || buttonError);
+                return sock.sendMessage(chatId, { text: `Quick actions: ${shortcutButtons.map(button => button.buttonId).join('  ')}` }, { quoted: message });
+            }
+        }
+        try {
+            return await sock.sendMessage(chatId, {
+                text: helpMessage,
+                footer: 'LEE TECH Interactive Menu',
+                buttons: shortcutButtons,
+                headerType: 1,
+            }, { quoted: message });
+        } catch (buttonError) {
+            console.warn('[menu] Shortcut buttons unavailable; using text-only fallback:', buttonError.message || buttonError);
+            return sock.sendMessage(chatId, { text: helpMessage }, { quoted: message });
+        }
     } catch (error) {
         console.error('[menu] send error:', error.message || error);
         return sock.sendMessage(chatId, { text: helpMessage }, { quoted: message });
