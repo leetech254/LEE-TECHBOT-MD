@@ -932,10 +932,19 @@ async function startXeonBotInc() {
                 reconnectNoticePending = false;
                 lastReconnectNoticeAt = Date.now();
                 const botNumber = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net';
+                const commandPrefix = global.prefix === 'none' ? '.' : (global.prefix || '.');
+                const displayedPrefix = global.prefix === 'none' ? 'none (use .)' : commandPrefix;
                 void XeonBotInc.sendMessage(botNumber, {
                     text: `🔄 *LEE TECH BOT RECONNECTED*\n\n` +
                         `Status: *Online and ready*\n` +
+                        `Prefix: *${displayedPrefix}*\n` +
                         `The bot is back online after a temporary connection reset.`,
+                    footer: `LEE TECH BOT • ${settings.version}`,
+                    buttons: [
+                        { buttonId: `${commandPrefix}ping`, buttonText: { displayText: '⚡ Ping' }, type: 1 },
+                        { buttonId: `${commandPrefix}github`, buttonText: { displayText: '⌘ GitHub' }, type: 1 },
+                    ],
+                    headerType: 1,
                 }).then(() => {
                     fs.mkdirSync(path.dirname(connectionNoticePath), { recursive: true })
                     fs.writeFileSync(connectionNoticePath, JSON.stringify({

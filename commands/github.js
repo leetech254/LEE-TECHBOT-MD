@@ -6,7 +6,8 @@ const path = require('path');
 
 async function githubCommand(sock, chatId, message) {
   try {
-    const res = await fetch('https://api.github.com/repos/networkserver06-commits/LEE-TECHBOT-MD');
+    const repository = process.env.BOT_GITHUB_REPO || 'leetech254/LEE-TECHBOT-MD';
+    const res = await fetch(`https://api.github.com/repos/${repository}`);
     if (!res.ok) throw new Error('Error fetching repository data');
     const json = await res.json();
 
