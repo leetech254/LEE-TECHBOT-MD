@@ -20,6 +20,7 @@ const FONT_MAPS = {
 };
 
 const STYLE_MAP = {
+    interactive: { open: '╭─〔', close: '〕', bullet: '│', footer: '╰────────────────────' },
     premium: { open: '╭─〔', close: '〕', bullet: '│', footer: '╰────────────────────' },
     neon: { open: '┏━【', close: '】', bullet: '┃', footer: '┗━━━━━━━━━━━━━━━━━━━━' },
     cyberpunk: { open: '⟦⟦', close: '⟧⟧', bullet: '▰', footer: '╞════════════════════╡' },
@@ -225,7 +226,7 @@ function buildCatalogMenu(context = {}) {
         }
         lines.push('┗━━━━━━━━━━━━━━━❍');
     }
-    lines.push('', `┏━━━━━━━━━━━━━━━❍`, `┃ *MENU CONTROLS*`, `┃ ${p}menustyle premium|neon|cyberpunk|minimal|terminal|royal`, `┃ ${p}menufont clean|bold|double|mono`, `┃ ${p}menumode image|text|status`, `┃ *POWERED BY LEE TECH*`, `┃ *OWNER: LEETECH*`, `┃ Use *${p}menu <category>* for a focused menu`, `┃ Use *${p}help <command>* for command guidance`, `┗━━━━━━━━━━━━━━━❍`);
+    lines.push('', `┏━━━━━━━━━━━━━━━❍`, `┃ *MENU CONTROLS*`, `┃ ${p}menustyle interactive|premium|neon|cyberpunk|minimal|terminal|royal`, `┃ ${p}menufont clean|bold|double|mono`, `┃ ${p}menumode image|text|status`, `┃ *POWERED BY LEE TECH*`, `┃ *OWNER: LEETECH*`, `┃ Use *${p}menu <category>* for a focused menu`, `┃ Use *${p}help <command>* for command guidance`, `┗━━━━━━━━━━━━━━━❍`);
     return lines.join('\n');
 }
 
@@ -314,7 +315,7 @@ function buildDeveloperMenu() {
             `*${p}hidechannel on/off*`,
             `*${p}setmenuimage*  — replace and enable the menu image`,
             `*${p}menumode image|text|status*  — switch display mode`,
-            `*${p}menustyle premium|neon|cyberpunk|minimal|terminal|royal*`,
+            `*${p}menustyle interactive|premium|neon|cyberpunk|minimal|terminal|royal*`,
             `*${p}menufont clean|bold|double|mono*`
         ]),
         '',
@@ -336,6 +337,54 @@ function developerButtons() {
     ];
 }
 
+function interactiveMenuPayload(categoryKey = '') {
+    const p = prefix();
+    if (categoryKey) {
+        const category = getCategory(categoryKey);
+        if (!category) return null;
+        return {
+            text: `🧭 *${category.title}*\nChoose a command to run:`,
+            title: `${category.title} commands`,
+            buttonText: '📋 Choose command',
+            footer: 'LEE TECH Interactive Menu',
+            sections: [{
+                title: `${category.commands.length} available commands`,
+                rows: category.commands.map(command => ({
+                    title: `${p}${command}`,
+                    description: `Run ${p}${command}`,
+                    rowId: `${p}${command}`,
+                })),
+            }],
+        };
+    }
+    return {
+        text: '🧭 *LEE TECH INTERACTIVE MENU*\nChoose a category to browse commands:',
+        title: 'Command categories',
+        buttonText: '📂 Open categories',
+        footer: 'LEE TECH Interactive Menu',
+        sections: [{
+            title: 'Browse all commands',
+            rows: MENU_CATEGORIES.map(category => ({
+                title: category.title,
+                description: `${category.commands.length} commands`,
+                rowId: `${p}menu ${category.key}`,
+            })),
+        }],
+    };
+}
+
+async function sendInteractiveMenu(sock, chatId, message, categoryKey = '') {
+    const payload = interactiveMenuPayload(categoryKey);
+    if (!payload) return false;
+    try {
+        await sock.sendMessage(chatId, payload, { quoted: message });
+        return true;
+    } catch (error) {
+        console.warn('[menu] Interactive list unavailable; using text fallback:', error.message || error);
+        return false;
+    }
+}
+
 function buildDetails(topic) {
     const p = prefix();
     const topics = {
@@ -355,8 +404,13 @@ async function helpCommand(sock, chatId, message) {
     const first = words[0]?.toLowerCase();
     const requestedTopic = words[1]?.toLowerCase()
         || (['.devmenu', '.developermenu', '.devtools', '.tools'].includes(first) ? 'dev' : first === '.groupmenu' ? 'admin' : undefined);
+    const config = menuConfig();
+    const interactive = config.style === 'interactive';
     const categoryMenu = requestedTopic ? buildCategoryMenu(requestedTopic) : null;
     const helpMessage = categoryMenu || (requestedTopic ? buildDetails(requestedTopic) : buildMenu({ chatId, message }));
+    if (interactive && (!requestedTopic || categoryMenu)) {
+        if (await sendInteractiveMenu(sock, chatId, message, categoryMenu ? requestedTopic : '')) return;
+    }
     const image = requestedTopic ? null : menuImage();
 
     try {
@@ -409,3 +463,4 @@ module.exports.buildMenu = buildMenu;
 module.exports.buildFeatureStatus = buildFeatureStatus;
 module.exports.buildDeveloperMenu = buildDeveloperMenu;
 module.exports.developerButtons = developerButtons;
+module.exports.interactiveMenuPayload = interactiveMenuPayload;

@@ -9,6 +9,7 @@ const { activePrefix } = require('../lib/menuShortcuts');
 const menuImagePath = path.join(process.cwd(), 'menu.jpg');
 const menuSettingsPath = path.join(process.cwd(), 'data', 'menuSettings.json');
 const MENU_STYLES = [
+    { name: 'interactive', label: '🧭 Interactive', description: 'Browse categories and commands with menus' },
     { name: 'premium', label: '✨ Premium', description: 'Elegant premium border' },
     { name: 'neon', label: '💡 Neon', description: 'Bright neon accents' },
     { name: 'cyberpunk', label: '🟣 Cyberpunk', description: 'Futuristic cyber style' },

@@ -21,11 +21,19 @@ test('category aliases resolve to focused menus', () => {
 });
 
 test('interactive menu style selector exposes all supported styles', () => {
-    assert.deepEqual(MENU_STYLES.map(style => style.name), ['premium', 'neon', 'cyberpunk', 'minimal', 'terminal', 'royal']);
+    assert.deepEqual(MENU_STYLES.map(style => style.name), ['interactive', 'premium', 'neon', 'cyberpunk', 'minimal', 'terminal', 'royal']);
     for (const style of MENU_STYLES) {
         assert.ok(style.label);
         assert.ok(style.description);
     }
+});
+
+test('interactive menu navigates categories and commands with list row IDs', () => {
+    const main = help.interactiveMenuPayload();
+    assert.equal(main.sections.length, 1);
+    assert.ok(main.sections[0].rows.some(row => row.rowId === '.menu settings'));
+    const category = help.interactiveMenuPayload('settings');
+    assert.ok(category.sections[0].rows.some(row => row.rowId === '.update'));
 });
 
 test('image maker category exposes working image and logo commands', () => {
@@ -46,7 +54,7 @@ test('catalog commands are unique and menu exposes category navigation', () => {
     assert.match(menu, /POWERED BY LEE TECH/);
     assert.match(menu, /OWNER: LEETECH/);
     assert.match(menu, /MENU CONTROLS/);
-    assert.match(menu, /menustyle premium\|neon\|cyberpunk\|minimal\|terminal\|royal/);
+    assert.match(menu, /menustyle interactive\|premium\|neon\|cyberpunk\|minimal\|terminal\|royal/);
     assert.match(menu, /menufont clean\|bold\|double\|mono/);
     assert.match(menu, /menumode image\|text\|status/);
 });
