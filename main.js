@@ -332,6 +332,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
             }
         }
 
+        if (message.message?.listResponseMessage?.singleSelectReply?.selectedRowId) {
+            message.message = { conversation: message.message.listResponseMessage.singleSelectReply.selectedRowId };
+        }
+
         const extractedText = message.message?.conversation ||
             message.message?.extendedTextMessage?.text ||
             message.message?.imageMessage?.caption ||

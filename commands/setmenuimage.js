@@ -8,6 +8,14 @@ const { activePrefix } = require('../lib/menuShortcuts');
 
 const menuImagePath = path.join(process.cwd(), 'menu.jpg');
 const menuSettingsPath = path.join(process.cwd(), 'data', 'menuSettings.json');
+const MENU_STYLES = [
+    { name: 'premium', label: '✨ Premium', description: 'Elegant premium border' },
+    { name: 'neon', label: '💡 Neon', description: 'Bright neon accents' },
+    { name: 'cyberpunk', label: '🟣 Cyberpunk', description: 'Futuristic cyber style' },
+    { name: 'minimal', label: '◻️ Minimal', description: 'Clean minimal layout' },
+    { name: 'terminal', label: '⌨️ Terminal', description: 'Developer terminal style' },
+    { name: 'royal', label: '👑 Royal', description: 'Luxury royal theme' },
+];
 
 function readMenuSettings() {
     return readJson(menuSettingsPath, { enabled: false });
@@ -40,23 +48,40 @@ async function setMenuImageCommand(sock, chatId, message, isOwnerOrSudoCheck) {
     const current = readMenuSettings();
 
     if (command === '.menustyle') {
-        const styles = ['premium', 'neon', 'cyberpunk', 'minimal', 'terminal', 'royal'];
+        const styles = MENU_STYLES.map(style => style.name);
         if (!argument || argument === 'status') {
             const text = `🎛️ *MENU STYLE*\n\nCurrent: *${current.style || 'premium'}*\nChoose a style below or use ${activePrefix(global.prefix)}menustyle <name>.\nAvailable: ${styles.join(', ')}`;
+            const prefix = activePrefix(global.prefix);
+            const rows = MENU_STYLES.map(style => ({
+                title: style.label,
+                description: style.description,
+                rowId: `${prefix}menustyle ${style.name}`,
+            }));
             try {
                 return await sock.sendMessage(chatId, {
                     text,
                     footer: 'LEE TECH Menu Designer',
-                    buttons: [
-                        { buttonId: `${activePrefix(global.prefix)}menustyle premium`, buttonText: { displayText: '✨ Premium' }, type: 1 },
-                        { buttonId: `${activePrefix(global.prefix)}menustyle neon`, buttonText: { displayText: '💡 Neon' }, type: 1 },
-                        { buttonId: `${activePrefix(global.prefix)}menustyle cyberpunk`, buttonText: { displayText: '🟣 Cyberpunk' }, type: 1 },
-                    ],
-                    headerType: 1,
+                    title: 'Choose a menu style',
+                    buttonText: '🎨 View styles',
+                    sections: [{ title: 'Available styles', rows }],
                 }, { quoted: message });
             } catch (buttonError) {
-                console.warn('[menu-style] Buttons unavailable; using text-only fallback:', buttonError.message || buttonError);
-                return sock.sendMessage(chatId, { text }, { quoted: message });
+                console.warn('[menu-style] List unavailable; trying buttons:', buttonError.message || buttonError);
+                try {
+                    return await sock.sendMessage(chatId, {
+                        text,
+                        footer: 'LEE TECH Menu Designer',
+                        buttons: MENU_STYLES.slice(0, 3).map(style => ({
+                            buttonId: `${prefix}menustyle ${style.name}`,
+                            buttonText: { displayText: style.label },
+                            type: 1,
+                        })),
+                        headerType: 1,
+                    }, { quoted: message });
+                } catch (fallbackError) {
+                    console.warn('[menu-style] Buttons unavailable; using text-only fallback:', fallbackError.message || fallbackError);
+                    return sock.sendMessage(chatId, { text }, { quoted: message });
+                }
             }
         }
         if (!styles.includes(argument)) return sock.sendMessage(chatId, { text: `❌ Choose one style: ${styles.join(', ')}` }, { quoted: message });
@@ -121,3 +146,4 @@ module.exports = setMenuImageCommand;
 module.exports.menuImagePath = menuImagePath;
 module.exports.menuSettingsPath = menuSettingsPath;
 module.exports.readMenuSettings = readMenuSettings;
+module.exports.MENU_STYLES = MENU_STYLES;

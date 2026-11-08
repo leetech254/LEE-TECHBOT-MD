@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const { MENU_CATEGORIES, getCategory, allCommands } = require('../lib/menuCatalog');
 const help = require('../commands/help');
 const { botInfoCommand } = require('../commands/utility');
+const { MENU_STYLES } = require('../commands/setmenuimage');
 
 test('menu catalog contains every requested top-level category', () => {
     assert.deepEqual(
@@ -17,6 +18,14 @@ test('category aliases resolve to focused menus', () => {
     assert.equal(getCategory('group').key, 'groups');
     assert.equal(getCategory('image').key, 'img-maker');
     assert.equal(getCategory('download').key, 'downloads');
+});
+
+test('interactive menu style selector exposes all supported styles', () => {
+    assert.deepEqual(MENU_STYLES.map(style => style.name), ['premium', 'neon', 'cyberpunk', 'minimal', 'terminal', 'royal']);
+    for (const style of MENU_STYLES) {
+        assert.ok(style.label);
+        assert.ok(style.description);
+    }
 });
 
 test('image maker category exposes working image and logo commands', () => {
