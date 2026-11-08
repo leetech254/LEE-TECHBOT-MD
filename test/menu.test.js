@@ -2,6 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('fs');
+const path = require('path');
 const { MENU_CATEGORIES, getCategory, allCommands } = require('../lib/menuCatalog');
 const help = require('../commands/help');
 const { botInfoCommand } = require('../commands/utility');
@@ -34,6 +36,11 @@ test('interactive menu navigates categories and commands with list row IDs', () 
     assert.ok(main.sections[0].rows.some(row => row.rowId === '.menu settings'));
     const category = help.interactiveMenuPayload('settings');
     assert.ok(category.sections[0].rows.some(row => row.rowId === '.update'));
+});
+
+test('catalog wasted command has an explicit main-router route', () => {
+    const mainSource = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+    assert.match(mainSource, /userMessage === '\.wasted'/);
 });
 
 test('image maker category exposes working image and logo commands', () => {

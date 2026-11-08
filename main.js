@@ -1226,7 +1226,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 await characterCommand(sock, chatId, message);
                 commandExecuted = true;
                 break;
-            case userMessage.startsWith('.waste'):
+            case userMessage === '.waste' || userMessage.startsWith('.waste ') || userMessage === '.wasted' || userMessage.startsWith('.wasted '):
                 await wastedCommand(sock, chatId, message);
                 commandExecuted = true;
                 break;
