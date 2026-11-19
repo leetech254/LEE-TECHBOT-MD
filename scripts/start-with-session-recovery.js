@@ -3,8 +3,8 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { resolveAuthDir } = require('../lib/storagePaths');
+const { cleanupUnwantedFiles } = require('../lib/diskCleanup');
 
 const entry = path.resolve(process.env.BOT_ENTRY || path.join(process.cwd(), 'index.js'));
 const authDir = resolveAuthDir(process.env);
@@ -19,21 +19,14 @@ let stopping = false;
 let resetForNextLaunch = shouldResetSession;
 
 function cleanupStartupArtifacts() {
-    const roots = [
-        path.resolve(process.env.TEMP_DIR || path.join(os.tmpdir(), 'lee-techbot')),
-        path.resolve(process.env.TEMP_DIR || path.join(os.tmpdir(), 'lee-techbot-tmp'))
-    ];
-    for (const root of roots) {
-        try {
-            if (!fs.existsSync(root)) continue;
-            for (const name of fs.readdirSync(root)) {
-                if (/^(update-|\.part$)/i.test(name) || name.endsWith('.part')) {
-                    fs.rmSync(path.join(root, name), { recursive: true, force: true });
-                }
-            }
-        } catch (error) {
-            console.warn(`[session-recovery] Could not clean temporary artifacts: ${error.message}`);
-        }
+    try {
+        const removed = cleanupUnwantedFiles({
+            cwd: process.cwd(),
+            tempDir: path.resolve(process.env.TEMP_DIR || path.join(os.tmpdir(), 'lee-techbot'))
+        });
+        if (removed.length) log(`Removed ${removed.length} safe temporary/cache artifact(s) before startup.`);
+    } catch (error) {
+        console.warn(`[session-recovery] Could not clean temporary artifacts: ${error.message}`);
     }
 }
 
