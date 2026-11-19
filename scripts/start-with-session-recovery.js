@@ -3,9 +3,11 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const { resolveAuthDir } = require('../lib/storagePaths');
 
 const entry = path.resolve(process.env.BOT_ENTRY || path.join(process.cwd(), 'index.js'));
-const authDir = path.resolve(process.env.AUTH_DIR || (process.env.PORT ? '/app/auth' : path.join(process.cwd(), 'session')));
+const authDir = resolveAuthDir(process.env);
 const badMacPattern = /bad mac|verif(?:y|ication)mac|failed to decrypt|decrypt.*session|failed to decrypt message with any known session|over\s+\d+\s+messages?\s+into\s+the\s+future/i;
 // Never destroy a paired session automatically. Set SESSION_RECOVERY_RESET=true
 // only for an intentional manual relink after backing up the auth directory.
@@ -15,6 +17,25 @@ let child = null;
 let recovering = false;
 let stopping = false;
 let resetForNextLaunch = shouldResetSession;
+
+function cleanupStartupArtifacts() {
+    const roots = [
+        path.resolve(process.env.TEMP_DIR || path.join(os.tmpdir(), 'lee-techbot')),
+        path.resolve(process.env.TEMP_DIR || path.join(os.tmpdir(), 'lee-techbot-tmp'))
+    ];
+    for (const root of roots) {
+        try {
+            if (!fs.existsSync(root)) continue;
+            for (const name of fs.readdirSync(root)) {
+                if (/^(update-|\.part$)/i.test(name) || name.endsWith('.part')) {
+                    fs.rmSync(path.join(root, name), { recursive: true, force: true });
+                }
+            }
+        } catch (error) {
+            console.warn(`[session-recovery] Could not clean temporary artifacts: ${error.message}`);
+        }
+    }
+}
 
 function log(message) {
     process.stdout.write(`[session-recovery] ${message}\n`);
@@ -99,4 +120,5 @@ if (!fs.existsSync(entry)) {
     console.error(`[session-recovery] Bot entrypoint not found: ${entry}`);
     process.exit(1);
 }
+cleanupStartupArtifacts();
 launch();
