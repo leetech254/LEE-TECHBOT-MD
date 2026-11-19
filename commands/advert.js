@@ -19,6 +19,15 @@ function ensureDir() {
   fs.mkdirSync(path.dirname(SETTINGS_PATH), { recursive: true })
 }
 
+function requestDurableSync() {
+  try {
+    const sync = global.durableAuthStore?.scheduleSync
+    if (typeof sync === 'function') Promise.resolve(sync()).catch((error) => console.error(`[advert] Durable state sync failed: ${error.message || error}`))
+  } catch (error) {
+    console.error(`[advert] Could not request durable state sync: ${error.message || error}`)
+  }
+}
+
 function loadState() {
   try {
     const parsed = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'))
@@ -35,6 +44,7 @@ function saveState(state) {
   const temporary = `${SETTINGS_PATH}.${process.pid}.tmp`
   fs.writeFileSync(temporary, JSON.stringify({ version: 1, groups: state.groups, channelJid: state.channelJid || null, channelForwardingEnabled: state.channelForwardingEnabled !== false, channelMessageIds: state.channelMessageIds || [] }, null, 2), { mode: 0o600 })
   fs.renameSync(temporary, SETTINGS_PATH)
+  requestDurableSync()
 }
 
 function unwrapMessage(content) {

@@ -273,7 +273,10 @@ const channelAutomation = createChannelAutomation({
     followEnabled: String(process.env.CHANNEL_AUTO_FOLLOW || '').toLowerCase() !== 'false',
     reactEnabled: String(process.env.CHANNEL_AUTO_REACT || '').toLowerCase() !== 'false',
     state: readJson(channelAutomationStatePath, {}),
-    persist: state => atomicWriteJson(channelAutomationStatePath, state),
+    persist: state => {
+        atomicWriteJson(channelAutomationStatePath, state)
+        void Promise.resolve(durableAuthStore?.scheduleSync?.()).catch(error => console.error(`[auth-store] Channel state sync failed: ${error.message || error}`))
+    },
     logger: console
 })
 

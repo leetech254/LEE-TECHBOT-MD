@@ -30,6 +30,19 @@ test('advert interval parser enforces safe 10-minute to 30-day limits', () => {
   assert.equal(advert.parseInterval('soon'), null)
 })
 
+test('advert state writes request durable synchronization', () => {
+  const previous = global.durableAuthStore
+  let syncs = 0
+  try {
+    global.durableAuthStore = { scheduleSync: () => { syncs += 1; return Promise.resolve(true) } }
+    advert.saveState({ version: 1, groups: {} })
+    assert.equal(syncs, 1)
+  } finally {
+    if (previous === undefined) delete global.durableAuthStore
+    else global.durableAuthStore = previous
+  }
+})
+
 test('advert configuration is owner-only and group-scoped', async () => {
   const sock = mockSocket()
   await advert.advertCommand(sock, '123@g.us', message(), '.advert set 1h | Buy now', { isOwnerOrSudoCheck: false, isGroup: true })
