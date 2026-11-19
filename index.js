@@ -928,7 +928,7 @@ async function startXeonBotInc() {
             // Signal sessions are usable. Delay only self-chat sends so the
             // first post-restart owner reply is not rendered as a retry
             // placeholder; groups and ordinary DMs remain immediate.
-            selfChatWarmupUntil = Date.now() + 5000
+            selfChatWarmupUntil = Date.now() + 1500
             signalRecoveryScheduled = false
             signalDecryptFailures.length = 0
             if (reconnectTimer) {
