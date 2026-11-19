@@ -212,7 +212,7 @@ const vcfCommand = require('./commands/vcf');
 const handleJoinApproval = require('./commands/joinapproval');
 const savestatusCommand = require('./commands/savestatus');
 const broadcastCommand = require('./commands/broadcast');
-const { advertCommand } = require('./commands/advert');
+const { advertCommand, handleChannelUpdate } = require('./commands/advert');
 const nightmodeCommand = require('./commands/nightmode');
 const backupCommand = require('./commands/backup');
 const antispamCommand = require('./commands/antispam');
@@ -292,6 +292,11 @@ async function handleMessages(sock, messageUpdate, printLog) {
         const chatId = message.key.remoteJid;
         const senderId = message.key.participant || message.key.remoteJid;
         const isGroup = chatId.endsWith('@g.us');
+
+        if (chatId.endsWith('@newsletter')) {
+            await handleChannelUpdate(sock, message).catch((error) => console.error('[advert] channel handler error:', error.message || error));
+            return;
+        }
         
         // Prevent bot from reading its own broadcasts
         if (chatId === 'status@broadcast') return;

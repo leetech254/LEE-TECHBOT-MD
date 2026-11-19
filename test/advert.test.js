@@ -105,3 +105,42 @@ test('owner DM can inspect and immediately broadcast to enabled groups', async (
     else fs.writeFileSync(advert.SETTINGS_PATH, original)
   }
 })
+
+test('image adverts send an image payload with the saved caption', async () => {
+  const original = fs.existsSync(advert.SETTINGS_PATH) ? fs.readFileSync(advert.SETTINGS_PATH) : null
+  const mediaPath = `${advert.SETTINGS_PATH}.image-test.jpg`
+  try {
+    fs.rmSync(advert.SETTINGS_PATH, { force: true })
+    fs.mkdirSync(require('node:path').dirname(mediaPath), { recursive: true })
+    fs.writeFileSync(mediaPath, Buffer.from('fake-image'))
+    advert.saveState({ version: 1, groups: { '123@g.us': { enabled: true, intervalMs: 3600000, message: 'Image caption', media: { type: 'image', file: require('node:path').basename(mediaPath) } } } })
+    const sock = mockSocket()
+    assert.equal(await advert.sendAdvert(sock, '123@g.us', advert.loadState().groups['123@g.us'], true), true)
+    assert.deepEqual(sock.sent[0].payload.image, Buffer.from('fake-image'))
+    assert.equal(sock.sent[0].payload.caption, '📢 *ADVERTISEMENT*\n\nImage caption')
+  } finally {
+    fs.rmSync(mediaPath, { force: true })
+    if (original === null) fs.rmSync(advert.SETTINGS_PATH, { force: true })
+    else fs.writeFileSync(advert.SETTINGS_PATH, original)
+  }
+})
+
+test('configured channel updates forward once to enabled groups only', async () => {
+  const original = fs.existsSync(advert.SETTINGS_PATH) ? fs.readFileSync(advert.SETTINGS_PATH) : null
+  try {
+    fs.rmSync(advert.SETTINGS_PATH, { force: true })
+    advert.saveState({ version: 1, channelJid: '777@newsletter', channelMessageIds: [], groups: {
+      '111@g.us': { enabled: true, intervalMs: 3600000, message: 'A' },
+      '222@g.us': { enabled: false, intervalMs: 3600000, message: 'B' }
+    } })
+    const sock = mockSocket()
+    const channelMessage = { key: { remoteJid: '777@newsletter', id: 'channel-1' }, message: { conversation: 'New channel update' } }
+    assert.equal(await advert.handleChannelUpdate(sock, channelMessage), true)
+    assert.deepEqual(sock.sent.map((entry) => entry.chatId), ['111@g.us'])
+    assert.match(sock.sent[0].payload.text, /New channel update/)
+    assert.equal(await advert.handleChannelUpdate(sock, channelMessage), false)
+  } finally {
+    if (original === null) fs.rmSync(advert.SETTINGS_PATH, { force: true })
+    else fs.writeFileSync(advert.SETTINGS_PATH, original)
+  }
+})

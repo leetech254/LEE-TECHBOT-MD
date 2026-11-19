@@ -2,6 +2,8 @@
 
 const fs = require('fs')
 const path = require('path')
+const crypto = require('crypto')
+const { downloadContentFromMessage } = require('@whiskeysockets/baileys')
 
 // Keep schedules beside the auth files. The existing durable auth store then
 // includes them in the immutable S3/Bucketeer session generations.
@@ -31,8 +33,46 @@ function loadState() {
 function saveState(state) {
   ensureDir()
   const temporary = `${SETTINGS_PATH}.${process.pid}.tmp`
-  fs.writeFileSync(temporary, JSON.stringify({ version: 1, groups: state.groups }, null, 2), { mode: 0o600 })
+  fs.writeFileSync(temporary, JSON.stringify({ version: 1, groups: state.groups, channelJid: state.channelJid || null, channelMessageIds: state.channelMessageIds || [] }, null, 2), { mode: 0o600 })
   fs.renameSync(temporary, SETTINGS_PATH)
+}
+
+function unwrapMessage(content) {
+  return content?.ephemeralMessage?.message || content?.viewOnceMessage?.message || content?.viewOnceMessageV2?.message || content || null
+}
+
+function quotedContent(message) {
+  return message?.message?.extendedTextMessage?.contextInfo?.quotedMessage || null
+}
+
+function mediaFromCommand(message) {
+  const direct = unwrapMessage(message?.message)
+  const quoted = unwrapMessage(quotedContent(message))
+  if (direct?.imageMessage) return { type: 'image', payload: direct.imageMessage }
+  if (quoted?.imageMessage) return { type: 'image', payload: quoted.imageMessage }
+  return null
+}
+
+function captionFromCommand(message, fallback = '') {
+  const direct = unwrapMessage(message?.message)
+  const quoted = unwrapMessage(quotedContent(message))
+  const directCaption = String(direct?.imageMessage?.caption || '').trim()
+  const usableDirectCaption = /^\.advert(?:\s|$)/i.test(directCaption) ? '' : directCaption
+  return String(fallback || usableDirectCaption || quoted?.imageMessage?.caption || '').trim()
+}
+
+async function saveAdvertMedia(message, groupId) {
+  const media = mediaFromCommand(message)
+  if (!media) return null
+  const chunks = []
+  const stream = await downloadContentFromMessage(media.payload, media.type)
+  for await (const chunk of stream) chunks.push(chunk)
+  const buffer = Buffer.concat(chunks)
+  if (!buffer.length || buffer.length > 10 * 1024 * 1024) throw new Error('image is empty or larger than 10 MB')
+  const filename = `advert-${crypto.createHash('sha1').update(groupId).digest('hex').slice(0, 12)}-${Date.now()}.jpg`
+  ensureDir()
+  fs.writeFileSync(path.join(path.dirname(SETTINGS_PATH), filename), buffer, { mode: 0o600 })
+  return { type: media.type, file: filename }
 }
 
 function parseInterval(value) {
@@ -69,6 +109,7 @@ function advertHelp() {
     '',
     'Use these owner commands inside the target group:',
     '• `.advert set 6h | Your advert text` — configure and enable',
+    '• Reply to an image with `.advert set 6h` — schedule the image and its caption',
     '• `.advert on` — enable an existing advert',
     '• `.advert off` — pause this group',
     '• `.advert status` — view the current schedule',
@@ -78,6 +119,8 @@ function advertHelp() {
     'From the owner DM:',
     '• `.advert status` — view all enabled groups',
     '• `.advert now` — send each enabled advert immediately',
+    '• `.advert channel <channel JID>` — forward channel updates',
+    '• `.advert channel status/off` — inspect or stop forwarding',
     '',
     'Minimum interval: *10 minutes*. Maximum: *30 days*.',
     'No group receives adverts unless an owner explicitly configures it.'
@@ -86,7 +129,7 @@ function advertHelp() {
 
 function enabledGroups(state) {
   return Object.entries(state.groups).filter(([groupId, config]) => (
-    groupId.endsWith('@g.us') && config?.enabled === true && config.message && config.intervalMs
+    groupId.endsWith('@g.us') && config?.enabled === true && (config.message || config.media) && config.intervalMs
   ))
 }
 
@@ -104,7 +147,7 @@ async function sendEnabledAdverts(sock) {
 }
 
 function ownerDmStatus(state) {
-  const groups = Object.entries(state.groups).filter(([groupId, config]) => groupId.endsWith('@g.us') && config?.message)
+  const groups = Object.entries(state.groups).filter(([groupId, config]) => groupId.endsWith('@g.us') && (config?.message || config?.media))
   if (!groups.length) return '📢 No advert groups are configured yet. Use `.advert set 6h | Your advert text` inside a group.'
   const lines = groups.map(([groupId, config], index) => {
     const stateLabel = config.enabled ? 'ON' : 'OFF'
@@ -113,6 +156,46 @@ function ownerDmStatus(state) {
     return `${index + 1}. ${groupId}\n   Status: *${stateLabel}* | Delivery: *${delivery}* | Sent: *${Number(config.sentCount || 0)}*\n   Next: ${next}`
   })
   return `📢 *ADVERT GROUPS*\n\n${lines.join('\n\n')}`
+}
+
+const channelSending = new Set()
+
+async function handleChannelUpdate(sock, channelMessage) {
+  const state = loadState()
+  const channelJid = channelMessage?.key?.remoteJid
+  if (!channelJid || !state.channelJid || channelJid !== state.channelJid) return false
+  const messageId = channelMessage.key?.id
+  if (!messageId || state.channelMessageIds?.includes(messageId)) return false
+  const content = unwrapMessage(channelMessage.message)
+  const image = content?.imageMessage
+  const video = content?.videoMessage
+  const text = String(content?.conversation || content?.extendedTextMessage?.text || image?.caption || video?.caption || '').trim()
+  if (!text && !image && !video) return false
+  const targets = enabledGroups(state)
+  if (!targets.length || channelSending.has(messageId)) return false
+  channelSending.add(messageId)
+  try {
+    let payload = { text: `📢 *CHANNEL UPDATE*\n\n${text}`.trim() }
+    if (image || video) {
+      const media = image || video
+      const type = image ? 'image' : 'video'
+      const chunks = []
+      const stream = await downloadContentFromMessage(media, type)
+      for await (const chunk of stream) chunks.push(chunk)
+      payload = { [type]: Buffer.concat(chunks), caption: `📢 *CHANNEL UPDATE*\n\n${text}`.trim() }
+    }
+    await Promise.all(targets.map(([groupId]) => sock.sendMessage(groupId, payload)))
+    const ids = Array.isArray(state.channelMessageIds) ? state.channelMessageIds : []
+    state.channelMessageIds = [...ids, messageId].slice(-100)
+    saveState(state)
+    console.log(`[advert] Forwarded channel update ${messageId} to ${targets.length} enabled groups.`)
+    return true
+  } catch (error) {
+    console.error(`[advert] Could not forward channel update ${messageId}:`, error.message || error)
+    return false
+  } finally {
+    channelSending.delete(messageId)
+  }
 }
 
 async function reply(sock, chatId, message, text) {
@@ -127,9 +210,13 @@ async function sendAdvert(sock, groupId, config, immediate = false) {
   if (!sock || !groupId.endsWith('@g.us') || sending.has(groupId)) return false
   sending.add(groupId)
   try {
-    const result = await sock.sendMessage(groupId, {
-      text: `📢 *ADVERTISEMENT*\n\n${config.message}`
-    })
+    const body = `📢 *ADVERTISEMENT*\n\n${config.message || ''}`.trim()
+    let payload = { text: body }
+    if (config.media?.type === 'image' && config.media.file) {
+      const mediaPath = path.join(path.dirname(SETTINGS_PATH), config.media.file)
+      if (fs.existsSync(mediaPath)) payload = { image: fs.readFileSync(mediaPath), caption: body }
+    }
+    const result = await sock.sendMessage(groupId, payload)
     const state = loadState()
     const current = state.groups[groupId]
     if (current && current.message === config.message) {
@@ -166,7 +253,7 @@ async function tick() {
   const state = loadState()
   const now = Date.now()
   for (const [groupId, config] of Object.entries(state.groups)) {
-    if (!config || config.enabled !== true || !config.message || !config.intervalMs) continue
+    if (!config || config.enabled !== true || (!config.message && !config.media) || !config.intervalMs) continue
     if (sending.has(groupId) || Number(config.nextAt || 0) > now) continue
     await sendAdvert(sock, groupId, config)
   }
@@ -195,6 +282,22 @@ async function advertCommand(sock, chatId, message, userMessage, context = {}) {
 
   if (!context.isGroup || !chatId.endsWith('@g.us')) {
     if (action === 'help') return reply(sock, chatId, message, advertHelp())
+    if (action === 'channel') {
+      const channelAction = String(args[0] || '').toLowerCase()
+      if (channelAction === 'status') return reply(sock, chatId, message, state.channelJid ? `📢 Channel forwarding is *ON*.\nSource: ${state.channelJid}` : '📢 Channel forwarding is *OFF*.')
+      if (channelAction === 'off' || channelAction === 'disable' || channelAction === 'stop') {
+        state.channelJid = null
+        state.channelMessageIds = []
+        saveState(state)
+        return reply(sock, chatId, message, '✅ Channel forwarding is disabled.')
+      }
+      const channelJid = String(args[0] || '').trim()
+      if (!/^\d+@newsletter$/.test(channelJid)) return reply(sock, chatId, message, 'Usage: `.advert channel 123456789@newsletter`\nUse `.channel-id` in the channel to find its JID.')
+      state.channelJid = channelJid
+      state.channelMessageIds = []
+      saveState(state)
+      return reply(sock, chatId, message, `✅ Channel forwarding enabled. Updates from ${channelJid} will be sent to every enabled advert group.`)
+    }
     if (action === 'status') return reply(sock, chatId, message, ownerDmStatus(state))
     if (action === 'now' || action === 'send') {
       const result = await sendEnabledAdverts(sock)
@@ -243,15 +346,24 @@ async function advertCommand(sock, chatId, message, userMessage, context = {}) {
   if (action === 'set' || action === 'configure') {
     const payload = rest
     const separator = payload.indexOf('|')
-    if (separator < 0) return reply(sock, chatId, message, 'Usage: `.advert set 6h | Your advert text`\nInterval must be between 10m and 30d.')
-    const intervalMs = parseInterval(payload.slice(0, separator))
-    const advertText = payload.slice(separator + 1).trim()
+    const intervalMs = parseInterval(separator < 0 ? payload : payload.slice(0, separator))
+    const advertText = separator < 0 ? captionFromCommand(message) : payload.slice(separator + 1).trim()
+    const hasMedia = Boolean(mediaFromCommand(message))
+    if (separator < 0 && !hasMedia) return reply(sock, chatId, message, 'Usage: `.advert set 6h | Your advert text`\nOr reply to an image with `.advert set 6h` to schedule the image.\nInterval must be between 10m and 30d.')
     if (!intervalMs) return reply(sock, chatId, message, '❌ Invalid interval. Use 10m–30d, for example `30m`, `6h`, or `2d`.')
-    if (advertText.length < 3 || advertText.length > 2000) return reply(sock, chatId, message, '❌ Advert text must contain 3–2000 characters.')
+    if (advertText.length > 2000) return reply(sock, chatId, message, '❌ Advert caption must not exceed 2000 characters.')
+    let media = current?.media || null
+    if (hasMedia) {
+      try { media = await saveAdvertMedia(message, chatId) } catch (error) {
+        return reply(sock, chatId, message, `❌ Could not save the advert image: ${error.message || error}`)
+      }
+    }
+    if (!advertText && !media) return reply(sock, chatId, message, '❌ Add advert text or reply to an image.')
     state.groups[chatId] = {
       enabled: true,
       intervalMs,
-      message: advertText,
+      message: advertText || '',
+      media,
       nextAt: Date.now() + intervalMs,
       lastSentAt: current?.lastSentAt || null,
       sentCount: Number(current?.sentCount || 0),
@@ -271,6 +383,8 @@ module.exports = {
   loadState,
   saveState,
   advertCommand,
+  sendAdvert,
+  handleChannelUpdate,
   attachAdvertScheduler,
   detachAdvertScheduler,
   tick
