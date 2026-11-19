@@ -82,6 +82,29 @@ test('speed and ping aliases use the local latency handler', async () => {
     assert.match(sock.sent.at(-1).payload.text, /SPEED TEST|Measuring response speed/i);
 });
 
+test('get routes through the universal downloader', async () => {
+    const sent = [];
+    const sock = { async sendMessage(chatId, payload) { sent.push(payload); } };
+    const chatId = '123@s.whatsapp.net';
+    const message = { key: { remoteJid: chatId }, message: { conversation: '.get' } };
+
+    assert.equal(await menuCompatCommand(sock, chatId, message, '.get'), true);
+    assert.match(sent[0].text, /UNIVERSAL DOWNLOAD/);
+    assert.doesNotMatch(sent[0].text, /handler is not available/i);
+});
+
+test('local handlers that return undefined do not fall through to the unavailable response', async () => {
+    const sent = [];
+    const sock = { async sendMessage(chatId, payload) { sent.push(payload); } };
+    const chatId = '123@s.whatsapp.net';
+    const message = { key: { remoteJid: chatId }, message: { conversation: '.8ballpool Will this route?' } };
+
+    assert.equal(await menuCompatCommand(sock, chatId, message, '.8ballpool Will this route?'), true);
+    assert.equal(sent.length, 1);
+    assert.match(sent[0].text, /🎱/);
+    assert.doesNotMatch(sent[0].text, /handler is not available/i);
+});
+
 test('health and botinfo diagnostics return local runtime data', async () => {
     const sock = mockSock();
     assert.equal(await menuCompatCommand(sock, '123@s.whatsapp.net', message, '.health', {}), true);
