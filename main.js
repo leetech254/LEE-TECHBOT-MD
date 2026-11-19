@@ -269,7 +269,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
         if (!message?.message) return;
         if (type === 'append') {
             const timestampMs = Number(message.messageTimestamp || 0) * 1000;
-            if (timestampMs && Date.now() - timestampMs > 2 * 60 * 1000) return;
+            // Self-chat commands can be delivered as append events just after
+            // pairing/reconnect. Keep the replay window bounded while giving
+            // the fast command lane enough time to process them.
+            if (timestampMs && Date.now() - timestampMs > 10 * 60 * 1000) return;
         }
         if (typeof message.key?.remoteJid !== 'string' || !message.key.remoteJid) return;
         if (messageGuard.isDuplicate(message.key?.id)) return;

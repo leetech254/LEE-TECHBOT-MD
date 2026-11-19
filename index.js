@@ -723,11 +723,13 @@ async function startXeonBotInc() {
     XeonBotInc.ev.on('messages.upsert', async chatUpdate => {
         try {
             const messages = Array.isArray(chatUpdate?.messages) ? chatUpdate.messages : []
-            // Do not process encrypted updates while Baileys is still opening
-            // or handing off a reconnecting socket. Processing them too early
-            // can create duplicate replies and WhatsApp's "waiting for this
-            // message" placeholders while Signal sessions catch up.
-            if (!XeonBotInc.__connectionOpened || activeSocket !== XeonBotInc) return
+            // Do not process encrypted updates from an old socket while a
+            // reconnect is being handed off. A current socket may emit a
+            // command in the small interval between `connection: open` and
+            // the lifecycle banner, so the open event is also accepted as
+            // ready even before the banner flag is set.
+            if (activeSocket !== XeonBotInc) return
+            if (!XeonBotInc.__connectionOpened && hostPairingRuntime.connection !== 'open') return
             const accountJid = jidNormalizedUser(XeonBotInc.user?.id || '')
             for (const message of messages) {
                 if (String(message?.key?.remoteJid || '').endsWith('@newsletter')) {
