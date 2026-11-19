@@ -3,7 +3,9 @@
 const fs = require('fs')
 const path = require('path')
 
-const SETTINGS_PATH = path.join(process.cwd(), 'data', 'advertisements.json')
+// Keep schedules beside the auth files. The existing durable auth store then
+// includes them in the immutable S3/Bucketeer session generations.
+const SETTINGS_PATH = path.join(process.env.AUTH_DIR || path.join(process.cwd(), 'session'), 'advertisements.json')
 const MIN_INTERVAL_MS = 10 * 60 * 1000
 const MAX_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000
 const TICK_MS = 60 * 1000
