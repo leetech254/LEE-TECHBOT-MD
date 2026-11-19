@@ -459,6 +459,7 @@ async function helpCommand(sock, chatId, message) {
 }
 
 module.exports = helpCommand;
+module.exports.platformName = platformName;
 module.exports.buildMenu = buildMenu;
 module.exports.buildFeatureStatus = buildFeatureStatus;
 module.exports.buildDeveloperMenu = buildDeveloperMenu;

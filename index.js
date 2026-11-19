@@ -53,7 +53,8 @@ const { createDurableAuthStore } = require('./lib/durableAuthStore')
 const { resolveHostPairingMode, resolveHostMenuChoice, resolvePairingWebStartupMode, resolveHostPairingPort, shouldAutoStartPairingWeb, renderTerminalQr } = require('./lib/hostPairing')
 const { CHANNEL_LINKS, createChannelAutomation } = require('./lib/channelAutomation')
 const { createHostPairingServer } = require('./lib/hostPairingWeb')
-const { activePrefix, menuShortcutButtons } = require('./lib/menuShortcuts')
+const { menuShortcutButtons } = require('./lib/menuShortcuts')
+const { formatConnectedMessage, formatReconnectedMessage } = require('./lib/connectionNotice')
 const selfChatModule = require('./lib/selfChat')
 const { selfChatSendOptions, isSelfChat, createSelfChatSendQueue } = selfChatModule
 const enqueueSelfChatSend = typeof createSelfChatSendQueue === 'function'
@@ -915,21 +916,15 @@ async function startXeonBotInc() {
                 try {
                     const botNumber = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net';
                     const authStatus = durableAuthStore.status?.() || {};
-                    const sessionLabel = authStatus.enabled
-                        ? 'S3 backup enabled'
-                        : authStatus.localPersistent
-                            ? 'Panel local storage'
-                            : authStatus.localWritable
-                                ? 'Local storage'
-                                : 'Storage unavailable';
                     await XeonBotInc.sendMessage(botNumber, {
-                        text: `✅ *LEE TECH BOT ONLINE*\n\n` +
-                            `┃ Status: *Online and ready*\n` +
-                            `┃ Time: ${new Date().toLocaleString()}\n` +
-                            `┃ Version: *${settings.version}*\n` +
-                            `┃ Session: *${sessionLabel}*\n` +
-                            `┃ Backup: *${authStatus.enabled ? (authStatus.lastSyncAt ? 'Saved' : 'Starting') : authStatus.localPersistent ? 'Panel volume' : 'Not configured'}*\n\n` +
-                            `Use *.menu* for commands and *.ping* to check response speed.`,
+                        text: formatConnectedMessage({
+                            botName: settings.botName,
+                            version: settings.version,
+                            prefix: global.prefix ?? settings.prefix,
+                            storageStatus: authStatus,
+                            connectedAt: new Date(),
+                            timeZone: settings.timezone
+                        }),
                     });
                     fs.mkdirSync(path.dirname(connectionNoticePath), { recursive: true })
                     fs.writeFileSync(connectionNoticePath, JSON.stringify({ sent: true, sentAt: new Date().toISOString() }))
@@ -940,12 +935,11 @@ async function startXeonBotInc() {
                 reconnectNoticePending = false;
                 lastReconnectNoticeAt = Date.now();
                 const botNumber = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net';
-                const commandPrefix = activePrefix(global.prefix);
-                const displayedPrefix = global.prefix === 'none' ? 'none (use .)' : commandPrefix;
-                const reconnectText = `🔄 *LEE TECH BOT RECONNECTED*\n\n` +
-                    `Status: *Online and ready*\n` +
-                    `Prefix: *${displayedPrefix}*\n` +
-                    `The bot is back online after a temporary connection reset.`;
+                const reconnectText = formatReconnectedMessage({
+                    botName: settings.botName,
+                    version: settings.version,
+                    prefix: global.prefix ?? settings.prefix
+                });
                 const reconnectPayload = {
                     text: reconnectText,
                     footer: `LEE TECH BOT • ${settings.version}`,
