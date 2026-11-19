@@ -3,7 +3,22 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const { menuCompatCommand } = require('../commands/menuCompat');
+
+test('strict menu audit requires a code route for every catalog command', () => {
+    const repo = path.join(__dirname, '..');
+    const result = spawnSync(process.execPath, ['scripts/audit-menu-commands.js', '--strict'], {
+        cwd: repo,
+        encoding: 'utf8'
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const audit = JSON.parse(result.stdout);
+    assert.equal(audit.total, 244);
+    assert.equal(audit.routed, audit.total);
+    assert.deepEqual(audit.unrouted, []);
+});
 
 test('recognized-command fallback never asks users to resend after connection', () => {
     const source = fs.readFileSync(path.join(__dirname, '..', 'commands', 'menuCompat.js'), 'utf8');

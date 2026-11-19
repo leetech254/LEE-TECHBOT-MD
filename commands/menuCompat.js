@@ -99,7 +99,7 @@ const ANIME_ALIASES = {
 
 const DOWNLOAD_ALIASES = new Set([
     'ytmp3', 'ytmp4', 'mediafire', 'wallpaper', 'hdwallpaper', 'pinterest', 'img', 'aio',
-    'fdroid', 'imgsearch', 'twitter', 'apk', 'spotifysearch', 'splay', 'knackvideo'
+    'fdroid', 'imgsearch', 'twitter', 'apk', 'spotifysearch', 'splay', 'knackvideo', 'get'
 ]);
 
 const LEGACY_COMMANDS = new Set([
@@ -275,7 +275,7 @@ async function menuCompatCommand(sock, chatId, message, input, context = {}) {
     }
 
     const local = await handleSimpleLocal(sock, chatId, message, command, args, context);
-    if (local) return true;
+    if (local !== null) return true;
 
     if (command === 'autoviewstatus') {
         await autoStatusCommand(sock, chatId, message, args);
