@@ -17,7 +17,12 @@ test('common persistent volume variables are detected automatically', () => {
 
 test('hosted fallback uses the standard container auth mount', () => {
   assert.equal(isHosted({ P_SERVER_UUID: 'server-1' }), true)
-  assert.equal(resolveAuthDir({ P_SERVER_UUID: 'server-1' }), '/app/auth')
+  assert.equal(resolveAuthDir({ P_SERVER_UUID: 'server-1' }), path.resolve(process.cwd(), 'auth'))
+})
+
+test('panel templates that inject /app are redirected to a writable panel path', () => {
+  assert.equal(resolveAuthDir({ P_SERVER_UUID: 'server-1', AUTH_DIR: '/app' }), path.resolve(process.cwd(), 'auth'))
+  assert.equal(resolveAuthDir({ PTERODACTYL_SERVER_UUID: 'server-1', AUTH_DIR: '/app/auth' }), path.resolve(process.cwd(), 'auth'))
 })
 
 test('local fallback preserves the existing session directory', () => {
