@@ -212,6 +212,7 @@ const vcfCommand = require('./commands/vcf');
 const handleJoinApproval = require('./commands/joinapproval');
 const savestatusCommand = require('./commands/savestatus');
 const broadcastCommand = require('./commands/broadcast');
+const { advertCommand } = require('./commands/advert');
 const nightmodeCommand = require('./commands/nightmode');
 const backupCommand = require('./commands/backup');
 const antispamCommand = require('./commands/antispam');
@@ -517,7 +518,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
         const adminCommands = ['.add', '.groupvcf', '.savecontacts', '.extract', '.mute', '.unmute', '.link', '.ban', '.unban', '.promote', '.promotemsg', '.promotion', '.promotions', '.antidemote', '.demote', '.kick', '.out', '.antifake', '.tagall', '.tagnotadmin', '.all', '.contacttag', '.tagadmin', '.hidetag', '.antilink', '.antiphoto', '.antisticker', '.antitag', '.antimention', '.setgdesc', '.setgname', '.setgpp', '.kickall'];
         const isAdminCommand = adminCommands.includes(commandToken);
 
-        const ownerCommands = ['.mode', '.autostatus', '.autoviewstatus', '.autolikestatus', '.antidelete', '.cleartmp', '.setpp', '.tostatus', '.togstatus', '.clearsession', '.creategroup', '.areact', '.autoreact', '.decrypt', '.autotyping', '.autoread', '.pmblocker', '.update', '.antiban', '.setpayment', '.setprefix', '.hidechannel', '.maintenance', '.ownerstatus', '.setmenuimage', '.setmenu', '.menumode', '.menustyle', '.menufont'];
+        const ownerCommands = ['.mode', '.autostatus', '.autoviewstatus', '.autolikestatus', '.antidelete', '.cleartmp', '.setpp', '.tostatus', '.togstatus', '.clearsession', '.creategroup', '.areact', '.autoreact', '.decrypt', '.autotyping', '.autoread', '.pmblocker', '.update', '.antiban', '.setpayment', '.setprefix', '.hidechannel', '.maintenance', '.ownerstatus', '.setmenuimage', '.setmenu', '.menumode', '.menustyle', '.menufont', '.advert'];
         const isOwnerCommand = ownerCommands.some(cmd => userMessage.startsWith(cmd));
 
         if (isGroup && isAdminCommand) {
@@ -713,6 +714,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage.startsWith('.broadcast') || userMessage.startsWith('.bc'):
                 await broadcastCommand(sock, chatId, message, isOwnerOrSudoCheck, userMessage);
+                commandExecuted = true;
+                break;
+            case commandToken === '.advert':
+                await advertCommand(sock, chatId, message, rawText, { isOwnerOrSudoCheck, isGroup });
                 commandExecuted = true;
                 break;
                 

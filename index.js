@@ -17,6 +17,7 @@ const FileType = require('file-type')
 const path = require('path')
 const axios = require('axios')
 const { handleMessages, handleGroupParticipantUpdate, handleStatus } = require('./main');
+const { attachAdvertScheduler, detachAdvertScheduler } = require('./commands/advert');
 const PhoneNumber = require('awesome-phonenumber')
 const { imageToWebp, videoToWebp, writeExifImg, writeExifVid } = require('./lib/exif')
 const { smsg, isUrl, generateMessageTag, getBuffer, getSizeMedia, fetch, await, sleep, reSize } = require('./lib/myfunc')
@@ -920,6 +921,7 @@ async function startXeonBotInc() {
             reconnectAttempts = 0
             streamRestartAttempts = 0
             ackStreamAttempts = 0
+            attachAdvertScheduler(XeonBotInc)
             console.log(chalk.magenta(` `))
             console.log(chalk.yellow(`🌿Connected to => ` + JSON.stringify(XeonBotInc.user, null, 2)))
             void channelAutomation.followChannels(XeonBotInc, jidNormalizedUser(XeonBotInc.user?.id || ''))
@@ -1039,6 +1041,7 @@ async function startXeonBotInc() {
             }
             const wasConnected = Boolean(XeonBotInc.__connectionOpened)
             XeonBotInc.__connectionOpened = false
+            detachAdvertScheduler(XeonBotInc)
             clearRegisteredSessionWatchdog()
             activeSocket = null
             if (global.__updateRestarting) {
