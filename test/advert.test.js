@@ -52,14 +52,17 @@ test('advert configuration is owner-only and group-scoped', async () => {
   assert.match(sock.sent.at(-1).payload.text, /configure adverts inside each target group/i)
 })
 
-test('advert set, status, off, and now persist and control one group', async () => {
+test('advert set is off by default and owner can turn one group on', async () => {
   const original = fs.existsSync(advert.SETTINGS_PATH) ? fs.readFileSync(advert.SETTINGS_PATH) : null
   try {
     fs.rmSync(advert.SETTINGS_PATH, { force: true })
     const sock = mockSocket()
     const context = { isOwnerOrSudoCheck: true, isGroup: true }
     await advert.advertCommand(sock, '123@g.us', message(), '.advert set 1h | Buy our service', context)
-    assert.match(sock.sent.at(-1).payload.text, /enabled/i)
+    assert.match(sock.sent.at(-1).payload.text, /currently \*OFF\*/i)
+    assert.equal(advert.loadState().groups['123@g.us'].enabled, false)
+
+    await advert.advertCommand(sock, '123@g.us', message(), '.advert on', context)
     assert.equal(advert.loadState().groups['123@g.us'].enabled, true)
 
     await advert.advertCommand(sock, '123@g.us', message(), '.advert status', context)
@@ -69,7 +72,7 @@ test('advert set, status, off, and now persist and control one group', async () 
     assert.equal(sock.sent.filter((entry) => entry.chatId === '123@g.us' && /ADVERTISEMENT/.test(entry.payload.text)).length, 1)
     assert.match(sock.sent.find((entry) => entry.payload.text.includes('ADVERTISEMENT')).payload.text, /Buy our service/)
     assert.equal(advert.loadState().groups['123@g.us'].lastDelivery, 'sent')
-    assert.equal(advert.loadState().groups['123@g.us'].lastMessageId, '3')
+    assert.equal(advert.loadState().groups['123@g.us'].lastMessageId, '4')
 
     await advert.advertCommand(sock, '123@g.us', message(), '.advert off', context)
     assert.equal(advert.loadState().groups['123@g.us'].enabled, false)
@@ -142,7 +145,7 @@ test('configured channel updates forward once to enabled groups only', async () 
   const original = fs.existsSync(advert.SETTINGS_PATH) ? fs.readFileSync(advert.SETTINGS_PATH) : null
   try {
     fs.rmSync(advert.SETTINGS_PATH, { force: true })
-    advert.saveState({ version: 1, channelJid: '777@newsletter', channelMessageIds: [], groups: {
+    advert.saveState({ version: 1, channelJid: '777@newsletter', channelForwardingEnabled: true, channelMessageIds: [], groups: {
       '111@g.us': { enabled: true, intervalMs: 3600000, message: 'A' },
       '222@g.us': { enabled: false, intervalMs: 3600000, message: 'B' }
     } })
@@ -166,11 +169,41 @@ test('existing followed channels are used without manual channel configuration',
   try {
     fs.rmSync(advert.SETTINGS_PATH, { force: true })
     fs.writeFileSync(channelStatePath, JSON.stringify({ accounts: { bot: { channelJids: { first: '888@newsletter' } } } }))
-    advert.saveState({ version: 1, groups: { '111@g.us': { enabled: true, intervalMs: 3600000, message: 'A' } } })
+    advert.saveState({ version: 1, channelForwardingEnabled: true, channelJids: ['888@newsletter'], groups: { '111@g.us': { enabled: true, intervalMs: 3600000, message: 'A' } } })
     const sock = mockSocket()
     const forwarded = await advert.handleChannelUpdate(sock, { key: { remoteJid: '888@newsletter', id: 'existing-1' }, message: { conversation: 'Existing channel post' } })
     assert.equal(forwarded, true)
     assert.equal(sock.sent[0].chatId, '111@g.us')
+  } finally {
+    if (original === null) fs.rmSync(advert.SETTINGS_PATH, { force: true })
+    else fs.writeFileSync(advert.SETTINGS_PATH, original)
+    if (originalChannels === null) fs.rmSync(channelStatePath, { force: true })
+    else fs.writeFileSync(channelStatePath, originalChannels)
+  }
+})
+
+test('owner can inspect and manage followed channel sources explicitly', async () => {
+  const path = require('node:path')
+  const original = fs.existsSync(advert.SETTINGS_PATH) ? fs.readFileSync(advert.SETTINGS_PATH) : null
+  const channelStatePath = path.join(path.dirname(advert.SETTINGS_PATH), '.channel-automation.json')
+  const originalChannels = fs.existsSync(channelStatePath) ? fs.readFileSync(channelStatePath) : null
+  try {
+    fs.rmSync(advert.SETTINGS_PATH, { force: true })
+    fs.writeFileSync(channelStatePath, JSON.stringify({ accounts: { bot: { channelJids: { first: '888@newsletter', second: '999@newsletter' } } } }))
+    const sock = mockSocket()
+    const dm = message()
+    const context = { isOwnerOrSudoCheck: true, isGroup: false }
+    await advert.advertCommand(sock, '254700000000@s.whatsapp.net', dm, '.advert channel on', context)
+    assert.match(sock.sent.at(-1).payload.text, /888@newsletter/)
+    assert.deepEqual(advert.loadState().channelJids.sort(), ['888@newsletter', '999@newsletter'])
+
+    await advert.advertCommand(sock, '254700000000@s.whatsapp.net', dm, '.advert channel remove 888@newsletter', context)
+    assert.deepEqual(advert.loadState().channelJids, ['999@newsletter'])
+    await advert.advertCommand(sock, '254700000000@s.whatsapp.net', dm, '.advert channel remove all', context)
+    assert.equal(advert.loadState().channelForwardingEnabled, false)
+    await advert.advertCommand(sock, '254700000000@s.whatsapp.net', dm, '.advert channel all', context)
+    assert.equal(advert.loadState().channelJids.length, 2)
+    assert.equal(advert.loadState().channelForwardingEnabled, true)
   } finally {
     if (original === null) fs.rmSync(advert.SETTINGS_PATH, { force: true })
     else fs.writeFileSync(advert.SETTINGS_PATH, original)
