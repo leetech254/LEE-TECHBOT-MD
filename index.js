@@ -269,13 +269,24 @@ async function gracefulShutdown(signal) {
     }
 }
 const channelAutomationStatePath = path.join(authDir, '.channel-automation.json')
+const authStorageStatus = durableAuthStore.status?.() || {}
+const localAuthStorageAvailable = durableAuthStore.enabled || authStorageStatus.localWritable === true || authStorageStatus.localPersistent === true
+let channelStorageWarningShown = false
 const channelAutomation = createChannelAutomation({
     channels: CHANNEL_LINKS,
-    followEnabled: String(process.env.CHANNEL_AUTO_FOLLOW || '').toLowerCase() !== 'false',
-    reactEnabled: String(process.env.CHANNEL_AUTO_REACT || '').toLowerCase() !== 'false',
+    followEnabled: localAuthStorageAvailable && String(process.env.CHANNEL_AUTO_FOLLOW || '').toLowerCase() !== 'false',
+    reactEnabled: localAuthStorageAvailable && String(process.env.CHANNEL_AUTO_REACT || '').toLowerCase() !== 'false',
     state: readJson(channelAutomationStatePath, {}),
     persist: state => {
-        atomicWriteJson(channelAutomationStatePath, state)
+        try {
+            atomicWriteJson(channelAutomationStatePath, state)
+        } catch (error) {
+            if (!channelStorageWarningShown) {
+                channelStorageWarningShown = true
+                console.warn(`[channel-auto] Channel state was not saved because local storage is unavailable: ${error.message || error}`)
+            }
+            return
+        }
         void Promise.resolve(durableAuthStore?.scheduleSync?.()).catch(error => console.error(`[auth-store] Channel state sync failed: ${error.message || error}`))
     },
     logger: console
