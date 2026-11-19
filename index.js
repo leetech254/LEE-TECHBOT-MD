@@ -54,6 +54,7 @@ const { resolveHostPairingMode, resolveHostMenuChoice, resolvePairingWebStartupM
 const { CHANNEL_LINKS, createChannelAutomation } = require('./lib/channelAutomation')
 const { createHostPairingServer } = require('./lib/hostPairingWeb')
 const { activePrefix, menuShortcutButtons } = require('./lib/menuShortcuts')
+const { formatConnectedMessage, formatReconnectedMessage } = require('./lib/connectionNotice')
 const selfChatModule = require('./lib/selfChat')
 const { selfChatSendOptions, isSelfChat, createSelfChatSendQueue } = selfChatModule
 const enqueueSelfChatSend = typeof createSelfChatSendQueue === 'function'
@@ -915,13 +916,6 @@ async function startXeonBotInc() {
                 try {
                     const botNumber = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net';
                     const authStatus = durableAuthStore.status?.() || {};
-                    const sessionLabel = authStatus.enabled
-                        ? 'S3 backup enabled'
-                        : authStatus.localPersistent
-                            ? 'Panel local storage'
-                            : authStatus.localWritable
-                                ? 'Local storage'
-                                : 'Storage unavailable';
                     await XeonBotInc.sendMessage(botNumber, {
                         text: `✅ *LEE TECH BOT ONLINE*\n\n` +
                             `┃ Status: *Online and ready*\n` +
