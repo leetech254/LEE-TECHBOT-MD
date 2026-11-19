@@ -52,6 +52,17 @@ function formatInterval(milliseconds) {
   return `${minutes}m`
 }
 
+function parseAdvertCommandText(userMessage) {
+  const raw = String(userMessage || '').replace(/\r\n/g, '\n').trim()
+  const body = raw.replace(/^\.[^\s]+/, '').trimStart()
+  const separator = body.search(/\s/)
+  if (separator < 0) return { action: body.toLowerCase(), rest: '' }
+  return {
+    action: body.slice(0, separator).toLowerCase(),
+    rest: body.slice(separator).trimStart()
+  }
+}
+
 function advertHelp() {
   return [
     '📢 *AUTOMATED ADVERTISING*',
@@ -81,26 +92,32 @@ async function sendAdvert(sock, groupId, config, immediate = false) {
   if (!sock || !groupId.endsWith('@g.us') || sending.has(groupId)) return false
   sending.add(groupId)
   try {
-    await sock.sendMessage(groupId, {
+    const result = await sock.sendMessage(groupId, {
       text: `📢 *ADVERTISEMENT*\n\n${config.message}`
     })
     const state = loadState()
     const current = state.groups[groupId]
     if (current && current.message === config.message) {
-      current.lastSentAt = Date.now()
-      current.nextAt = Date.now() + current.intervalMs
+      const sentAt = Date.now()
+      current.lastSentAt = sentAt
+      current.lastAttemptAt = sentAt
+      current.lastDelivery = 'sent'
+      current.lastMessageId = result?.key?.id || null
+      current.lastError = null
+      current.nextAt = sentAt + current.intervalMs
       current.sentCount = Number(current.sentCount || 0) + 1
       saveState(state)
     }
     return true
   } catch (error) {
     console.error(`[advert] Could not send advert to ${groupId}:`, error.message || error)
-    if (!immediate) {
-      const state = loadState()
-      if (state.groups[groupId]) {
-        state.groups[groupId].nextAt = Date.now() + Math.min(state.groups[groupId].intervalMs, 5 * 60 * 1000)
-        saveState(state)
-      }
+    const state = loadState()
+    if (state.groups[groupId]) {
+      state.groups[groupId].lastAttemptAt = Date.now()
+      state.groups[groupId].lastDelivery = 'retrying'
+      state.groups[groupId].lastError = String(error.message || error).slice(0, 240)
+      state.groups[groupId].nextAt = Date.now() + Math.min(state.groups[groupId].intervalMs, 5 * 60 * 1000)
+      saveState(state)
     }
     return false
   } finally {
@@ -136,8 +153,10 @@ function detachAdvertScheduler(sock) {
 async function advertCommand(sock, chatId, message, userMessage, context = {}) {
   if (!context.isOwnerOrSudoCheck) return reply(sock, chatId, message, '❌ Only the bot owner or sudo can configure automated advertising.')
   if (!context.isGroup || !chatId.endsWith('@g.us')) return reply(sock, chatId, message, '📢 Run `.advert` inside the group where the advert should be scheduled.')
-  const args = String(userMessage || '').trim().split(/\s+/).slice(1)
-  const action = String(args.shift() || 'help').toLowerCase()
+  const parsedCommand = parseAdvertCommandText(userMessage)
+  const action = parsedCommand.action || 'help'
+  const rest = parsedCommand.rest
+  const args = rest.split(/\s+/).filter(Boolean)
   const state = loadState()
   const current = state.groups[chatId]
 
@@ -145,7 +164,10 @@ async function advertCommand(sock, chatId, message, userMessage, context = {}) {
   if (action === 'status') {
     if (!current) return reply(sock, chatId, message, '📢 No advert is configured for this group. Use `.advert set 6h | Your advert text`.')
     const next = current.nextAt ? new Date(current.nextAt).toLocaleString() : 'waiting for scheduler'
-    return reply(sock, chatId, message, `📢 *ADVERT STATUS*\n\nStatus: *${current.enabled ? 'ON' : 'OFF'}*\nInterval: *${formatInterval(current.intervalMs)}*\nNext advert: *${next}*\nSent: *${Number(current.sentCount || 0)}*\n\nMessage:\n${current.message}`)
+    const delivery = current.lastDelivery === 'retrying'
+      ? `Retrying: *${current.lastError || 'temporary send failure'}*`
+      : `Last delivery: *${current.lastDelivery || 'not sent'}*`
+    return reply(sock, chatId, message, `📢 *ADVERT STATUS*\n\nStatus: *${current.enabled ? 'ON' : 'OFF'}*\nInterval: *${formatInterval(current.intervalMs)}*\nNext advert: *${next}*\nSent: *${Number(current.sentCount || 0)}*\n${delivery}\n\nMessage:\n${current.message}`)
   }
   if (action === 'off' || action === 'stop' || action === 'pause') {
     if (!current) return reply(sock, chatId, message, '📢 No advert is configured for this group.')
@@ -172,7 +194,7 @@ async function advertCommand(sock, chatId, message, userMessage, context = {}) {
     return reply(sock, chatId, message, sent ? '✅ Advert sent once. The normal schedule remains active.' : '❌ The advert could not be sent. Check that the bot is connected and still in the group.')
   }
   if (action === 'set' || action === 'configure') {
-    const payload = args.join(' ')
+    const payload = rest
     const separator = payload.indexOf('|')
     if (separator < 0) return reply(sock, chatId, message, 'Usage: `.advert set 6h | Your advert text`\nInterval must be between 10m and 30d.')
     const intervalMs = parseInterval(payload.slice(0, separator))

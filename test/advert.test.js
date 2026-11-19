@@ -54,9 +54,25 @@ test('advert set, status, off, and now persist and control one group', async () 
 
     await advert.advertCommand(sock, '123@g.us', message(), '.advert now', context)
     assert.equal(sock.sent.filter((entry) => entry.chatId === '123@g.us' && /ADVERTISEMENT/.test(entry.payload.text)).length, 1)
+    assert.match(sock.sent.find((entry) => entry.payload.text.includes('ADVERTISEMENT')).payload.text, /Buy our service/)
+    assert.equal(advert.loadState().groups['123@g.us'].lastDelivery, 'sent')
+    assert.equal(advert.loadState().groups['123@g.us'].lastMessageId, '3')
 
     await advert.advertCommand(sock, '123@g.us', message(), '.advert off', context)
     assert.equal(advert.loadState().groups['123@g.us'].enabled, false)
+  } finally {
+    if (original === null) fs.rmSync(advert.SETTINGS_PATH, { force: true })
+    else fs.writeFileSync(advert.SETTINGS_PATH, original)
+  }
+})
+
+test('advert command preserves multiline message formatting', async () => {
+  const original = fs.existsSync(advert.SETTINGS_PATH) ? fs.readFileSync(advert.SETTINGS_PATH) : null
+  try {
+    fs.rmSync(advert.SETTINGS_PATH, { force: true })
+    const sock = mockSocket()
+    await advert.advertCommand(sock, '123@g.us', message(), '.advert set 1h | Line one\n✨ Line two\nhttps://example.com', { isOwnerOrSudoCheck: true, isGroup: true })
+    assert.equal(advert.loadState().groups['123@g.us'].message, 'Line one\n✨ Line two\nhttps://example.com')
   } finally {
     if (original === null) fs.rmSync(advert.SETTINGS_PATH, { force: true })
     else fs.writeFileSync(advert.SETTINGS_PATH, original)
