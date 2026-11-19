@@ -33,7 +33,7 @@ function loadState() {
 function saveState(state) {
   ensureDir()
   const temporary = `${SETTINGS_PATH}.${process.pid}.tmp`
-  fs.writeFileSync(temporary, JSON.stringify({ version: 1, groups: state.groups, channelJid: state.channelJid || null, channelMessageIds: state.channelMessageIds || [] }, null, 2), { mode: 0o600 })
+  fs.writeFileSync(temporary, JSON.stringify({ version: 1, groups: state.groups, channelJid: state.channelJid || null, channelForwardingEnabled: state.channelForwardingEnabled !== false, channelMessageIds: state.channelMessageIds || [] }, null, 2), { mode: 0o600 })
   fs.renameSync(temporary, SETTINGS_PATH)
 }
 
@@ -119,8 +119,9 @@ function advertHelp() {
     'From the owner DM:',
     '• `.advert status` — view all enabled groups',
     '• `.advert now` — send each enabled advert immediately',
-    '• `.advert channel <channel JID>` — forward channel updates',
+    '• `.advert channel on` — use your already-followed channels',
     '• `.advert channel status/off` — inspect or stop forwarding',
+    '• `.advert channel <channel JID>` — optionally add a specific source',
     '',
     'Minimum interval: *10 minutes*. Maximum: *30 days*.',
     'No group receives adverts unless an owner explicitly configures it.'
@@ -158,12 +159,29 @@ function ownerDmStatus(state) {
   return `📢 *ADVERT GROUPS*\n\n${lines.join('\n\n')}`
 }
 
+function existingChannelJids() {
+  const channelStatePath = path.join(path.dirname(SETTINGS_PATH), '.channel-automation.json')
+  try {
+    const parsed = JSON.parse(fs.readFileSync(channelStatePath, 'utf8'))
+    return new Set(Object.values(parsed?.accounts || {}).flatMap((account) => Object.values(account?.channelJids || {})).filter((jid) => /^\d+@newsletter$/.test(jid)))
+  } catch (_) {
+    return new Set()
+  }
+}
+
+function configuredChannelJids(state) {
+  if (state.channelForwardingEnabled === false) return new Set()
+  const jids = existingChannelJids()
+  if (/^\d+@newsletter$/.test(state.channelJid || '')) jids.add(state.channelJid)
+  return jids
+}
+
 const channelSending = new Set()
 
 async function handleChannelUpdate(sock, channelMessage) {
   const state = loadState()
   const channelJid = channelMessage?.key?.remoteJid
-  if (!channelJid || !state.channelJid || channelJid !== state.channelJid) return false
+  if (!channelJid || !configuredChannelJids(state).has(channelJid)) return false
   const messageId = channelMessage.key?.id
   if (!messageId || state.channelMessageIds?.includes(messageId)) return false
   const content = unwrapMessage(channelMessage.message)
@@ -284,8 +302,19 @@ async function advertCommand(sock, chatId, message, userMessage, context = {}) {
     if (action === 'help') return reply(sock, chatId, message, advertHelp())
     if (action === 'channel') {
       const channelAction = String(args[0] || '').toLowerCase()
-      if (channelAction === 'status') return reply(sock, chatId, message, state.channelJid ? `📢 Channel forwarding is *ON*.\nSource: ${state.channelJid}` : '📢 Channel forwarding is *OFF*.')
+      if (channelAction === 'status') {
+        const sources = [...configuredChannelJids(state)]
+        return reply(sock, chatId, message, sources.length
+          ? `📢 Channel forwarding is *ON* for ${sources.length} already-followed channel(s).\nSources:\n${sources.join('\n')}`
+          : '📢 Channel forwarding is *OFF* or no followed channels have been resolved yet.')
+      }
+      if (channelAction === 'on' || channelAction === 'enable' || channelAction === 'start') {
+        state.channelForwardingEnabled = true
+        saveState(state)
+        return reply(sock, chatId, message, `✅ Existing followed channels will now forward updates to enabled advert groups.\nDetected: *${configuredChannelJids(state).size}* channel(s).`)
+      }
       if (channelAction === 'off' || channelAction === 'disable' || channelAction === 'stop') {
+        state.channelForwardingEnabled = false
         state.channelJid = null
         state.channelMessageIds = []
         saveState(state)
@@ -294,6 +323,7 @@ async function advertCommand(sock, chatId, message, userMessage, context = {}) {
       const channelJid = String(args[0] || '').trim()
       if (!/^\d+@newsletter$/.test(channelJid)) return reply(sock, chatId, message, 'Usage: `.advert channel 123456789@newsletter`\nUse `.channel-id` in the channel to find its JID.')
       state.channelJid = channelJid
+      state.channelForwardingEnabled = true
       state.channelMessageIds = []
       saveState(state)
       return reply(sock, chatId, message, `✅ Channel forwarding enabled. Updates from ${channelJid} will be sent to every enabled advert group.`)

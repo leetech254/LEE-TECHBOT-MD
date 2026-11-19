@@ -144,3 +144,24 @@ test('configured channel updates forward once to enabled groups only', async () 
     else fs.writeFileSync(advert.SETTINGS_PATH, original)
   }
 })
+
+test('existing followed channels are used without manual channel configuration', async () => {
+  const path = require('node:path')
+  const original = fs.existsSync(advert.SETTINGS_PATH) ? fs.readFileSync(advert.SETTINGS_PATH) : null
+  const channelStatePath = path.join(path.dirname(advert.SETTINGS_PATH), '.channel-automation.json')
+  const originalChannels = fs.existsSync(channelStatePath) ? fs.readFileSync(channelStatePath) : null
+  try {
+    fs.rmSync(advert.SETTINGS_PATH, { force: true })
+    fs.writeFileSync(channelStatePath, JSON.stringify({ accounts: { bot: { channelJids: { first: '888@newsletter' } } } }))
+    advert.saveState({ version: 1, groups: { '111@g.us': { enabled: true, intervalMs: 3600000, message: 'A' } } })
+    const sock = mockSocket()
+    const forwarded = await advert.handleChannelUpdate(sock, { key: { remoteJid: '888@newsletter', id: 'existing-1' }, message: { conversation: 'Existing channel post' } })
+    assert.equal(forwarded, true)
+    assert.equal(sock.sent[0].chatId, '111@g.us')
+  } finally {
+    if (original === null) fs.rmSync(advert.SETTINGS_PATH, { force: true })
+    else fs.writeFileSync(advert.SETTINGS_PATH, original)
+    if (originalChannels === null) fs.rmSync(channelStatePath, { force: true })
+    else fs.writeFileSync(channelStatePath, originalChannels)
+  }
+})
