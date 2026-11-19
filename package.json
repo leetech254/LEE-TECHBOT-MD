@@ -12,6 +12,7 @@
     "start:termux": "node --max-old-space-size=512 index.js",
     "start:optimized": "node --max-old-space-size=512 --gc-interval=100 index.js",
     "cleanup": "node cleanup.js",
+    "cleanup:storage": "node scripts/maintenance-cleanup.js",
     "reset-session": "node reset-session.js",
     "start:clean": "npm run cleanup && npm run start:optimized",
     "start:fresh": "npm run reset-session && npm start",

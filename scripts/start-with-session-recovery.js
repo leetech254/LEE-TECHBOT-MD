@@ -3,6 +3,7 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { resolveAuthDir } = require('../lib/storagePaths');
 const { cleanupUnwantedFiles } = require('../lib/diskCleanup');
 
@@ -22,7 +23,8 @@ function cleanupStartupArtifacts() {
     try {
         const removed = cleanupUnwantedFiles({
             cwd: process.cwd(),
-            tempDir: path.resolve(process.env.TEMP_DIR || path.join(os.tmpdir(), 'lee-techbot'))
+            tempDir: path.resolve(process.env.TEMP_DIR || path.join(os.tmpdir(), 'lee-techbot')),
+            authDir
         });
         if (removed.length) log(`Removed ${removed.length} safe temporary/cache artifact(s) before startup.`);
     } catch (error) {

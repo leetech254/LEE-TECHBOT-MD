@@ -5,6 +5,7 @@ const path = require('path');
 const os = require('os');
 const { TMP_DIR } = require('./lib/runtime');
 const { cleanupUnwantedFiles } = require('./lib/diskCleanup');
+const { resolveAuthDir } = require('./lib/storagePaths');
 
 const removableDirs = [TMP_DIR, path.join(os.tmpdir(), 'lee-techbot-tmp')];
 for (const directory of removableDirs) {
@@ -16,7 +17,7 @@ for (const directory of removableDirs) {
   console.log(`Cleaned runtime directory: ${directory}`);
 }
 
-const removed = cleanupUnwantedFiles({ tempDir: TMP_DIR });
+const removed = cleanupUnwantedFiles({ tempDir: TMP_DIR, authDir: resolveAuthDir(process.env) });
 console.log(`Removed ${removed.length} additional temporary/cache artifact(s).`);
 
 console.log('Cleanup complete; authentication and persistent data were preserved.');
