@@ -21,22 +21,24 @@ function formatTime(seconds) {
 async function pingCommand(sock, chatId, message) {
     try {
         const start = Date.now();
-        await sock.sendMessage(chatId, { text: 'Pong!' }, { quoted: message });
         const end = Date.now();
         const ping = Math.round((end - start) / 2);
 
         const uptimeInSeconds = process.uptime();
         const uptimeFormatted = formatTime(uptimeInSeconds);
 
-        const botInfo = `
+        const botInfo = `Pong!
+
 ┏━━〔 🤖 **LEE TECH𝐁𝐨𝐭-𝐌𝐃** 〕━━┓
 ┃ 🚀 Ping     : ${ping} ms
 ┃ ⏱️ Uptime   : ${uptimeFormatted}
 ┃ 🔖 Version  : v${settings.version}
 ┗━━━━━━━━━━━━━━━━━━━┛`.trim();
 
-        // Reply to the original message with the bot info
-        await sock.sendMessage(chatId, { text: botInfo},{ quoted: message });
+        // Send one atomic response. A second self-chat send could fail during
+        // the post-connection warmup and incorrectly produce a failure notice
+        // after the successful Pong had already been delivered.
+        await sock.sendMessage(chatId, { text: botInfo }, { quoted: message });
 
     } catch (error) {
         console.error('Error in ping command:', error);
