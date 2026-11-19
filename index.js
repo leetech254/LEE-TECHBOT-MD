@@ -94,6 +94,7 @@ let lastReconnectNoticeAt = Number(connectionNoticeState.lastReconnectNoticeAt) 
 const reconnectNoticeCooldownMs = Math.max(0, Number(process.env.RECONNECT_NOTICE_COOLDOWN_MS) || 6 * 60 * 60 * 1000)
 let reconnectNoticePending = false
 let lastDisconnectSummary = ''
+let temporaryDisconnectStartedAt = 0
 const pendingRestartNoticePath = path.join(DATA_DIR, '.pending-restart-notice.json')
 let pendingRestartNotice = readJson(pendingRestartNoticePath, {})
 const decryptWarningCache = new Map()
@@ -929,6 +930,8 @@ async function startXeonBotInc() {
                 try {
                     const botNumber = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net';
                     const authStatus = durableAuthStore.status?.() || {};
+                    const pairedNumber = pairedPhoneFromJid(XeonBotInc.user?.id || '') || hostPairingRuntime.phone || '';
+                    const pairedNumberLabel = pairedNumber ? `+${pairedNumber}` : 'available on host pairing page';
                     const sessionLabel = authStatus.enabled
                         ? 'S3 backup enabled'
                         : authStatus.localPersistent
@@ -937,8 +940,10 @@ async function startXeonBotInc() {
                                 ? 'Local storage'
                                 : 'Storage unavailable';
                     await XeonBotInc.sendMessage(botNumber, {
-                        text: `✅ *LEE TECH BOT ONLINE*\n\n` +
+                        text: `✅ *LEE TECH BOT CONNECTED*\n\n` +
+                            `┃ Connection: *First connection established*\n` +
                             `┃ Status: *Online and ready*\n` +
+                            `┃ WhatsApp: *${pairedNumberLabel}*\n` +
                             `┃ Time: ${new Date().toLocaleString()}\n` +
                             `┃ Version: *${settings.version}*\n` +
                             `┃ Session: *${sessionLabel}*\n` +
@@ -956,10 +961,17 @@ async function startXeonBotInc() {
                 const botNumber = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net';
                 const commandPrefix = activePrefix(global.prefix);
                 const displayedPrefix = global.prefix === 'none' ? 'none (use .)' : commandPrefix;
-                const reconnectText = `🔄 *LEE TECH BOT RECONNECTED*\n\n` +
-                    `Status: *Online and ready*\n` +
+                const downtimeMs = temporaryDisconnectStartedAt ? Math.max(0, Date.now() - temporaryDisconnectStartedAt) : 0;
+                const downtime = downtimeMs >= 60000
+                    ? `${Math.floor(downtimeMs / 60000)}m ${Math.floor((downtimeMs % 60000) / 1000)}s`
+                    : `${Math.max(1, Math.floor(downtimeMs / 1000))}s`;
+                const reconnectText = `🟢 *LEE TECH BOT RECONNECTED*\n\n` +
+                    `┃ Connection: *Recovered after temporary disconnect*\n` +
+                    `┃ Downtime: *${downtime}*\n` +
+                    `┃ Status: *Online and ready*\n` +
                     `Prefix: *${displayedPrefix}*\n` +
-                    `The bot is back online after a temporary connection reset.`;
+                    `Cause: *${lastDisconnectSummary || 'temporary WhatsApp connection reset'}*\n\n` +
+                    `The saved session was preserved and the bot is ready again.`;
                 const reconnectPayload = {
                     text: reconnectText,
                     footer: `LEE TECH BOT • ${settings.version}`,
@@ -991,6 +1003,7 @@ async function startXeonBotInc() {
                         } catch (error) {
                             console.warn('Could not persist reconnect notice state:', error.message || error);
                         }
+                        temporaryDisconnectStartedAt = 0;
                     }
                 })();
             }
@@ -1024,6 +1037,7 @@ async function startXeonBotInc() {
                 console.log(chalk.yellow('Ignoring close event from a stale WhatsApp socket.'))
                 return
             }
+            const wasConnected = Boolean(XeonBotInc.__connectionOpened)
             XeonBotInc.__connectionOpened = false
             clearRegisteredSessionWatchdog()
             activeSocket = null
@@ -1036,7 +1050,11 @@ async function startXeonBotInc() {
             const needsFreshPairing = statusCode === DisconnectReason.loggedOut || statusCode === 401
             lastDisconnectSummary = statusCode ? `WhatsApp status ${statusCode}` : 'temporary WhatsApp connection reset'
             const reconnectNoticeDue = Date.now() - lastReconnectNoticeAt >= reconnectNoticeCooldownMs
-            if (XeonBotInc.authState?.creds?.registered && !needsFreshPairing && reconnectNoticeDue) reconnectNoticePending = true
+            if (wasConnected && XeonBotInc.authState?.creds?.registered && !needsFreshPairing && reconnectNoticeDue) {
+                temporaryDisconnectStartedAt = Date.now()
+                reconnectNoticePending = true
+                console.warn(chalk.yellow(`WhatsApp temporarily disconnected (${lastDisconnectSummary}); preserving the saved session and reconnecting automatically.`))
+            }
             hostPairingRuntime.connection = 'close'
             hostPairingRuntime.connected = false
             hostPairingRuntime.ready = false
