@@ -51,6 +51,7 @@ const { DATA_DIR, ensureRuntimeDirs, readJson, atomicWriteJson } = require('./li
 const { normalizeWhatsAppNumber } = require('./lib/phone')
 const { restoreSessionBundle } = require('./lib/sessionBundle')
 const { createDurableAuthStore } = require('./lib/durableAuthStore')
+const { resolveAuthDir } = require('./lib/storagePaths')
 const { resolveHostPairingMode, resolveHostMenuChoice, resolvePairingWebStartupMode, resolveHostPairingPort, shouldAutoStartPairingWeb, renderTerminalQr } = require('./lib/hostPairing')
 const { CHANNEL_LINKS, createChannelAutomation } = require('./lib/channelAutomation')
 const { createHostPairingServer } = require('./lib/hostPairingWeb')
@@ -221,7 +222,7 @@ let owner = readJson('./data/owner.json', { owner: settings.ownerNumber || '' })
 
 global.botname = "LEE TECH BOT"
 global.themeemoji = "•"
-const authDir = process.env.AUTH_DIR || (process.env.PORT ? '/app/auth' : './session')
+const authDir = resolveAuthDir(process.env)
 let durableAuthStore
 let durableAuthStoreConfigError = null
 try {
