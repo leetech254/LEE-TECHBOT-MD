@@ -25,6 +25,43 @@ test('missing test command is routed by compatibility handler', async () => {
     assert.match(sock.sent[0].payload.text, /router is working/i);
 });
 
+test('panel reports safe hosting and session-storage status to the owner', async () => {
+    const keys = ['PLATFORM_NAME', 'SERVER_PORT', 'PORT', 'PAIRING_WEB_PORT'];
+    const oldEnv = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+    const oldStore = global.durableAuthStore;
+    process.env.PLATFORM_NAME = 'Test Hosting Panel';
+    process.env.SERVER_PORT = '24680';
+    delete process.env.PORT;
+    delete process.env.PAIRING_WEB_PORT;
+    global.durableAuthStore = { status: () => ({ enabled: true, healthy: true, error: 'secret-value' }) };
+    const sock = mockSock();
+
+    try {
+        const handled = await menuCompatCommand(sock, '123@s.whatsapp.net', message, '.panel', { isOwnerOrSudoCheck: true });
+        assert.equal(handled, true);
+        const text = sock.sent[0].payload.text;
+        assert.match(text, /Test Hosting Panel/);
+        assert.match(text, /Pairing port: \*24680\*/);
+        assert.match(text, /Pairing page: \*\/pairing\*/);
+        assert.match(text, /Cloud backup: \*enabled and healthy\*/);
+        assert.doesNotMatch(text, /secret-value/);
+    } finally {
+        for (const key of keys) {
+            if (oldEnv[key] === undefined) delete process.env[key];
+            else process.env[key] = oldEnv[key];
+        }
+        if (oldStore === undefined) delete global.durableAuthStore;
+        else global.durableAuthStore = oldStore;
+    }
+});
+
+test('panel remains owner-only', async () => {
+    const sock = mockSock();
+    const handled = await menuCompatCommand(sock, '123@s.whatsapp.net', message, '.panel', { isOwnerOrSudoCheck: false });
+    assert.equal(handled, true);
+    assert.match(sock.sent[0].payload.text, /restricted to the bot owner or sudo/i);
+});
+
 test('.create logo routes to image generation and returns the generated image', async () => {
     const sock = mockSock();
     const previousUrl = process.env.IMAGE_GENERATION_URL;
@@ -80,6 +117,29 @@ test('speed and ping aliases use the local latency handler', async () => {
     assert.match(sock.sent.at(-1).payload.text, /SPEED TEST|Measuring response speed/i);
     assert.equal(await menuCompatCommand(sock, '123@s.whatsapp.net', message, '.ping', {}), true);
     assert.match(sock.sent.at(-1).payload.text, /SPEED TEST|Measuring response speed/i);
+});
+
+test('get routes through the universal downloader', async () => {
+    const sent = [];
+    const sock = { async sendMessage(chatId, payload) { sent.push(payload); } };
+    const chatId = '123@s.whatsapp.net';
+    const message = { key: { remoteJid: chatId }, message: { conversation: '.get' } };
+
+    assert.equal(await menuCompatCommand(sock, chatId, message, '.get'), true);
+    assert.match(sent[0].text, /UNIVERSAL DOWNLOAD/);
+    assert.doesNotMatch(sent[0].text, /handler is not available/i);
+});
+
+test('local handlers that return undefined do not fall through to the unavailable response', async () => {
+    const sent = [];
+    const sock = { async sendMessage(chatId, payload) { sent.push(payload); } };
+    const chatId = '123@s.whatsapp.net';
+    const message = { key: { remoteJid: chatId }, message: { conversation: '.8ballpool Will this route?' } };
+
+    assert.equal(await menuCompatCommand(sock, chatId, message, '.8ballpool Will this route?'), true);
+    assert.equal(sent.length, 1);
+    assert.match(sent[0].text, /🎱/);
+    assert.doesNotMatch(sent[0].text, /handler is not available/i);
 });
 
 test('health and botinfo diagnostics return local runtime data', async () => {

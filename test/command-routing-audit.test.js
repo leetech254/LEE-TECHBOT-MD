@@ -3,21 +3,27 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const { menuCompatCommand } = require('../commands/menuCompat');
+
+test('strict menu audit requires a code route for every catalog command', () => {
+    const repo = path.join(__dirname, '..');
+    const result = spawnSync(process.execPath, ['scripts/audit-menu-commands.js', '--strict'], {
+        cwd: repo,
+        encoding: 'utf8'
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const audit = JSON.parse(result.stdout);
+    assert.equal(audit.total, 244);
+    assert.equal(audit.routed, audit.total);
+    assert.deepEqual(audit.unrouted, []);
+});
 
 test('recognized-command fallback never asks users to resend after connection', () => {
     const source = fs.readFileSync(path.join(__dirname, '..', 'commands', 'menuCompat.js'), 'utf8');
     assert.doesNotMatch(source, /Please send it again after the bot has fully connected/i);
     assert.match(source, /handler is not available in this deployment/i);
-});
-
-test('unsupported catalog commands receive an accurate response', async () => {
-    const sent = [];
-    const sock = { async sendMessage(chatId, payload) { sent.push(payload); } };
-    const message = { key: { remoteJid: '123@s.whatsapp.net' }, message: { conversation: '.panel' } };
-    assert.equal(await menuCompatCommand(sock, message.key.remoteJid, message, '.panel', { isOwnerOrSudoCheck: true }), true);
-    assert.match(sent[0].text, /handler is not available/i);
-    assert.doesNotMatch(sent[0].text, /send it again after the bot has fully connected/i);
 });
 
 test('reportcommand sends reports to the hardcoded developer number', async () => {

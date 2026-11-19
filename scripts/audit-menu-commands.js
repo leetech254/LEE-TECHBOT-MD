@@ -17,28 +17,28 @@ function commandsFromAttachedMenu(filePath) {
 
 const attached = commandsFromAttachedMenu(attachedPath);
 const catalog = [...new Set(attached.length ? attached : allCommands())];
-const source = [
+const routeSource = [
     fs.readFileSync(path.join(repo, 'main.js'), 'utf8'),
-    fs.readFileSync(path.join(repo, 'commands', 'menuCompat.js'), 'utf8'),
-    fs.readFileSync(path.join(repo, 'lib', 'menuCatalog.js'), 'utf8')
+    fs.readFileSync(path.join(repo, 'commands', 'menuCompat.js'), 'utf8')
 ].join('\n');
-const handlerNames = new Set(fs.readdirSync(path.join(repo, 'commands'))
-    .filter((file) => file.endsWith('.js'))
-    .map((file) => file.replace(/\.js$/, '').toLowerCase()));
-const explicit = catalog.filter((command) => {
+const hasDirectRoute = (command) => {
     const escaped = command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`(?:command|userMessage)\\s*(?:===|startsWith\\()\\s*['"]\\.?${escaped}(?:['"]|\\b)`, 'i').test(source)
-        || handlerNames.has(command);
+    const direct = new RegExp(`(?:command|userMessage)(?:\\.)?\\s*(?:===|startsWith\\()\\s*['"]\\.?${escaped}(?:['"]|\\b)`, 'i');
+    const literal = new RegExp(`['"\\x60]\\.?${escaped}['"\\x60]`, 'i');
+    const aliasKey = new RegExp(`\\b${escaped}\\s*:`, 'i');
+    return direct.test(routeSource) || literal.test(routeSource) || aliasKey.test(routeSource);
+};
+const direct = catalog.filter((command) => {
+    const escaped = command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(?:command|userMessage)(?:\\.)?\\s*(?:===|startsWith\\()\\s*['"]\\.?${escaped}(?:['"]|\\b)`, 'i').test(routeSource);
 });
-const fallback = catalog.filter((command) => !explicit.includes(command));
-const hasCatalogFallback = /allCommands\(\)\.includes\(command\)/.test(source);
-const unrouted = hasCatalogFallback ? [] : fallback;
+const unrouted = catalog.filter((command) => !hasDirectRoute(command));
 
 console.log(JSON.stringify({
     source: attached.length ? attachedPath : 'lib/menuCatalog.js',
     total: catalog.length,
-    explicit: explicit.length,
-    fallback,
+    direct: direct.length,
+    indirect: catalog.length - direct.length - unrouted.length,
     routed: catalog.length - unrouted.length,
     unrouted,
     strict: process.argv.includes('--strict')
