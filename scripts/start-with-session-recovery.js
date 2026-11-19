@@ -14,6 +14,7 @@ let alreadyRecovered = process.env.SESSION_RECOVERY_USED === '1';
 let child = null;
 let recovering = false;
 let stopping = false;
+let resetForNextLaunch = shouldResetSession;
 
 function log(message) {
     process.stdout.write(`[session-recovery] ${message}\n`);
@@ -27,8 +28,8 @@ function stopChild() {
     }, 5000).unref();
 }
 
-function resetBrokenSession() {
-    if (!shouldResetSession || !fs.existsSync(authDir)) return false;
+function resetBrokenSession(force = false) {
+    if ((!force && !shouldResetSession) || !fs.existsSync(authDir)) return false;
     const backupDir = `${authDir}.bad-mac-${new Date().toISOString().replace(/[:.]/g, '-')}`;
     try {
         fs.renameSync(authDir, backupDir);
@@ -42,9 +43,11 @@ function resetBrokenSession() {
 }
 
 function launch() {
+    const launchReset = resetForNextLaunch;
+    resetForNextLaunch = false;
     child = spawn(process.execPath, [entry], {
         cwd: process.cwd(),
-        env: { ...process.env, SESSION_RECOVERY_USED: alreadyRecovered ? '1' : '0' },
+        env: { ...process.env, SESSION_RECOVERY_USED: alreadyRecovered ? '1' : '0', SESSION_RECOVERY_RESET: launchReset ? 'true' : 'false' },
         stdio: ['inherit', 'pipe', 'pipe']
     });
 
@@ -61,7 +64,11 @@ function launch() {
             }
             stopChild();
         } else if (alreadyRecovered && badMacPattern.test(text)) {
-            log('Bad MAC happened again after recovery. No further automatic reset will be attempted. Check for duplicate bot instances or relink manually.');
+            recovering = true;
+            resetForNextLaunch = true;
+            log('Bad MAC happened again after recovery. Moving the broken auth folder aside and automatically opening a clean pairing session.');
+            resetBrokenSession(true);
+            stopChild();
         }
     };
 
@@ -79,7 +86,7 @@ function launch() {
             return;
         }
         if (alreadyRecovered && code !== 0) {
-            log(`Bot stopped after the one recovery attempt (code=${code}, signal=${signal || 'none'}). Link the device manually after checking the backup.`);
+            log(`Bot stopped after recovery (code=${code}, signal=${signal || 'none'}). A clean host pairing session will be started automatically.`);
         }
         process.exit(code ?? 0);
     });

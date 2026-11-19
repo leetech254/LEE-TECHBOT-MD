@@ -559,9 +559,23 @@ async function startXeonBotInc() {
             error.code = 'AUTH_STORE_CONFIG_INVALID'
             throw error
         }
+        if (process.env.SESSION_RECOVERY_RESET === 'true') {
+            try {
+                if (durableAuthStore.enabled) {
+                    const cleared = await durableAuthStore.clear()
+                    if (!cleared) console.warn('[session-recovery] Durable pointer could not be cleared yet; skipping remote restore for this clean-pairing launch.')
+                }
+            } catch (error) {
+                console.warn(`[session-recovery] Durable pointer clear failed; skipping remote restore for this clean-pairing launch: ${error.message || error}`)
+            }
+            rmSync(authDir, { recursive: true, force: true })
+            fs.mkdirSync(authDir, { recursive: true, mode: 0o700 })
+            process.env.SESSION_RECOVERY_RESET = 'consumed'
+            console.log('[session-recovery] Corrupt saved session cleared; starting a clean host pairing flow.')
+        }
         // Supply SESSION_BUNDLE/SESSION_ID, or choose a bundle, direct code,
         // or the method-selection pairing page served on this bot host.
-        if (durableAuthStore.enabled) {
+        if (durableAuthStore.enabled && process.env.SESSION_RECOVERY_RESET !== 'consumed') {
             await durableAuthStore.verifyAccess()
             await durableAuthStore.restore()
         }
