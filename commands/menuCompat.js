@@ -54,7 +54,8 @@ const { tagAllCommand, contactTagCommand, tagAdminsCommand } = require('./groupT
 const studentTools = require('./studentTools');
 const { whoisCommand, pingHostCommand, dnsCommand, scholarCommand, mathCommand, pdfCommand } = require('./academicTools');
 const { designCommand } = require('./design');
-const { buildFeatureStatus } = require('./help');
+const { buildFeatureStatus, platformName } = require('./help');
+const { resolveHostPairingPort } = require('../lib/hostPairing');
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const NOTES_FILE = path.join(DATA_DIR, 'menuNotes.json');
@@ -99,7 +100,7 @@ const ANIME_ALIASES = {
 
 const DOWNLOAD_ALIASES = new Set([
     'ytmp3', 'ytmp4', 'mediafire', 'wallpaper', 'hdwallpaper', 'pinterest', 'img', 'aio',
-    'fdroid', 'imgsearch', 'twitter', 'apk', 'spotifysearch', 'splay', 'knackvideo'
+    'fdroid', 'imgsearch', 'twitter', 'apk', 'spotifysearch', 'splay', 'knackvideo', 'get'
 ]);
 
 const LEGACY_COMMANDS = new Set([
@@ -265,6 +266,18 @@ async function menuCompatCommand(sock, chatId, message, input, context = {}) {
         await reply(sock, chatId, message, '❌ This command is restricted to the bot owner or sudo.');
         return true;
     }
+    if (command === 'panel') {
+        let storage = {};
+        try { storage = global.durableAuthStore?.status?.() || {}; } catch (_) {}
+        const sessionStorage = storage.enabled
+            ? `Cloud backup: *${storage.healthy ? 'enabled and healthy' : 'enabled; check storage health'}*`
+            : storage.localPersistent
+                ? 'Session storage: *persistent local storage detected*'
+                : 'Session storage: *persistence not confirmed* — configure a persistent volume or cloud backup before pairing.';
+        const pairingPort = resolveHostPairingPort(process.env);
+        await reply(sock, chatId, message, `╭─〔 🖥️ HOST PANEL STATUS 〕\n│ Provider: *${platformName()}*\n│ Pairing port: *${pairingPort}*\n│ Pairing page: */pairing*\n│ ${sessionStorage}\n╰──────────────`);
+        return true;
+    }
     if (GROUP_COMMANDS.has(command) && !context.isGroup) {
         await reply(sock, chatId, message, '❌ This command can only be used in a group.');
         return true;
@@ -275,7 +288,7 @@ async function menuCompatCommand(sock, chatId, message, input, context = {}) {
     }
 
     const local = await handleSimpleLocal(sock, chatId, message, command, args, context);
-    if (local) return true;
+    if (local !== null) return true;
 
     if (command === 'autoviewstatus') {
         await autoStatusCommand(sock, chatId, message, args);
