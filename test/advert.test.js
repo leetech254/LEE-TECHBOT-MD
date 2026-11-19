@@ -36,7 +36,7 @@ test('advert configuration is owner-only and group-scoped', async () => {
   assert.match(sock.sent.at(-1).payload.text, /owner or sudo/i)
 
   await advert.advertCommand(sock, '254700000000@s.whatsapp.net', message(), '.advert set 1h | Buy now', { isOwnerOrSudoCheck: true, isGroup: false })
-  assert.match(sock.sent.at(-1).payload.text, /inside the group/i)
+  assert.match(sock.sent.at(-1).payload.text, /configure adverts inside each target group/i)
 })
 
 test('advert set, status, off, and now persist and control one group', async () => {
@@ -73,6 +73,33 @@ test('advert command preserves multiline message formatting', async () => {
     const sock = mockSocket()
     await advert.advertCommand(sock, '123@g.us', message(), '.advert set 1h | Line one\n✨ Line two\nhttps://example.com', { isOwnerOrSudoCheck: true, isGroup: true })
     assert.equal(advert.loadState().groups['123@g.us'].message, 'Line one\n✨ Line two\nhttps://example.com')
+  } finally {
+    if (original === null) fs.rmSync(advert.SETTINGS_PATH, { force: true })
+    else fs.writeFileSync(advert.SETTINGS_PATH, original)
+  }
+})
+
+test('owner DM can inspect and immediately broadcast to enabled groups', async () => {
+  const original = fs.existsSync(advert.SETTINGS_PATH) ? fs.readFileSync(advert.SETTINGS_PATH) : null
+  try {
+    fs.rmSync(advert.SETTINGS_PATH, { force: true })
+    advert.saveState({ version: 1, groups: {
+      '111@g.us': { enabled: true, intervalMs: 3600000, message: 'First group', nextAt: Date.now() },
+      '222@g.us': { enabled: true, intervalMs: 3600000, message: 'Second group', nextAt: Date.now() },
+      '333@g.us': { enabled: false, intervalMs: 3600000, message: 'Paused group', nextAt: Date.now() }
+    } })
+    const sock = mockSocket()
+    const dm = { key: { remoteJid: '254700000000@s.whatsapp.net' }, message: { conversation: '.advert' } }
+    const context = { isOwnerOrSudoCheck: true, isGroup: false }
+
+    await advert.advertCommand(sock, '254700000000@s.whatsapp.net', dm, '.advert status', context)
+    assert.match(sock.sent.at(-1).payload.text, /111@g\.us/)
+    assert.match(sock.sent.at(-1).payload.text, /333@g\.us/)
+
+    await advert.advertCommand(sock, '254700000000@s.whatsapp.net', dm, '.advert now', context)
+    const deliveries = sock.sent.filter((entry) => /ADVERTISEMENT/.test(entry.payload.text))
+    assert.deepEqual(deliveries.map((entry) => entry.chatId).sort(), ['111@g.us', '222@g.us'])
+    assert.match(sock.sent.at(-1).payload.text, /Sent: \*2\/2\* enabled groups/)
   } finally {
     if (original === null) fs.rmSync(advert.SETTINGS_PATH, { force: true })
     else fs.writeFileSync(advert.SETTINGS_PATH, original)

@@ -75,9 +75,44 @@ function advertHelp() {
     '• `.advert now` — send one advert immediately',
     '• `.advert clear` — remove the saved advert',
     '',
+    'From the owner DM:',
+    '• `.advert status` — view all enabled groups',
+    '• `.advert now` — send each enabled advert immediately',
+    '',
     'Minimum interval: *10 minutes*. Maximum: *30 days*.',
     'No group receives adverts unless an owner explicitly configures it.'
   ].join('\n')
+}
+
+function enabledGroups(state) {
+  return Object.entries(state.groups).filter(([groupId, config]) => (
+    groupId.endsWith('@g.us') && config?.enabled === true && config.message && config.intervalMs
+  ))
+}
+
+async function sendEnabledAdverts(sock) {
+  const groups = enabledGroups(loadState())
+  const results = await Promise.all(groups.map(async ([groupId, config]) => ({
+    groupId,
+    sent: await sendAdvert(sock, groupId, config, true)
+  })))
+  return {
+    total: results.length,
+    sent: results.filter((result) => result.sent).length,
+    failed: results.filter((result) => !result.sent).length
+  }
+}
+
+function ownerDmStatus(state) {
+  const groups = Object.entries(state.groups).filter(([groupId, config]) => groupId.endsWith('@g.us') && config?.message)
+  if (!groups.length) return '📢 No advert groups are configured yet. Use `.advert set 6h | Your advert text` inside a group.'
+  const lines = groups.map(([groupId, config], index) => {
+    const stateLabel = config.enabled ? 'ON' : 'OFF'
+    const delivery = config.lastDelivery || 'not sent'
+    const next = config.enabled && config.nextAt ? new Date(config.nextAt).toLocaleString() : 'paused'
+    return `${index + 1}. ${groupId}\n   Status: *${stateLabel}* | Delivery: *${delivery}* | Sent: *${Number(config.sentCount || 0)}*\n   Next: ${next}`
+  })
+  return `📢 *ADVERT GROUPS*\n\n${lines.join('\n\n')}`
 }
 
 async function reply(sock, chatId, message, text) {
@@ -152,12 +187,24 @@ function detachAdvertScheduler(sock) {
 
 async function advertCommand(sock, chatId, message, userMessage, context = {}) {
   if (!context.isOwnerOrSudoCheck) return reply(sock, chatId, message, '❌ Only the bot owner or sudo can configure automated advertising.')
-  if (!context.isGroup || !chatId.endsWith('@g.us')) return reply(sock, chatId, message, '📢 Run `.advert` inside the group where the advert should be scheduled.')
   const parsedCommand = parseAdvertCommandText(userMessage)
   const action = parsedCommand.action || 'help'
   const rest = parsedCommand.rest
   const args = rest.split(/\s+/).filter(Boolean)
   const state = loadState()
+
+  if (!context.isGroup || !chatId.endsWith('@g.us')) {
+    if (action === 'help') return reply(sock, chatId, message, advertHelp())
+    if (action === 'status') return reply(sock, chatId, message, ownerDmStatus(state))
+    if (action === 'now' || action === 'send') {
+      const result = await sendEnabledAdverts(sock)
+      return reply(sock, chatId, message, result.total
+        ? `✅ Advert broadcast complete.\nSent: *${result.sent}/${result.total}* enabled groups.${result.failed ? `\nFailed and scheduled for retry: *${result.failed}*.` : ''}`
+        : '📢 No enabled advert groups were found. Configure one with `.advert set 6h | Your advert text` inside a group.')
+    }
+    return reply(sock, chatId, message, '📢 From owner DM use `.advert status` to view all groups or `.advert now` to send to every enabled group. Configure adverts inside each target group.')
+  }
+
   const current = state.groups[chatId]
 
   if (action === 'help') return reply(sock, chatId, message, advertHelp())
