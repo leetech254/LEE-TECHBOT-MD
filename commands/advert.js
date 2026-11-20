@@ -221,15 +221,25 @@ async function sendEnabledAdverts(sock) {
   }
 }
 
-function ownerDmStatus(state) {
+async function groupNameMap(sock) {
+  try {
+    const groups = await fetchParticipatingGroups(sock)
+    return new Map(groups.map((group) => [group.jid, group.subject || 'Unnamed group']))
+  } catch (_) {
+    return new Map()
+  }
+}
+
+async function ownerDmStatus(state, sock) {
   const groups = Object.entries(state.groups).filter(([groupId, config]) => groupId.endsWith('@g.us') && (config?.message || config?.media))
   if (!groups.length) return '📢 No advert groups are configured yet. Use `.advert set 6h | Your advert text` inside a group.'
+  const names = await groupNameMap(sock)
   const tick = String.fromCharCode(96)
   const lines = groups.map(([groupId, config], index) => {
     const stateLabel = config.enabled ? 'ON' : 'OFF'
     const delivery = config.lastDelivery || 'not sent'
     const next = config.enabled && config.nextAt ? new Date(config.nextAt).toLocaleString() : 'paused'
-    return `${index + 1}. ${tick}${groupId}${tick}\n   Type: *${advertContentType(config)}*\n   Status: *${stateLabel}* | Delivery: *${delivery}* | Sent: *${Number(config.sentCount || 0)}*\n   Next: ${next}`
+    return `${index + 1}. *${names.get(groupId) || 'Unnamed group'}*\n   Group ID: ${tick}${groupId}${tick}\n   Type: *${advertContentType(config)}*\n   Status: *${stateLabel}* | Delivery: *${delivery}* | Sent: *${Number(config.sentCount || 0)}*\n   Next: ${next}`
   })
   return `📢 *ADVERT GROUPS*\n\n${lines.join('\n\n')}`
 }
@@ -240,16 +250,17 @@ function advertContentType(config = {}) {
   return 'Text'
 }
 
-function ownerDmScheduleStatus(state) {
+async function ownerDmScheduleStatus(state, sock) {
   const active = Object.entries(state.groups || {}).filter(([groupId, config]) => (
     groupId.endsWith('@g.us') && config?.enabled === true && (config.message || config.media) && config.intervalMs
   ))
   if (!active.length) return '📢 No active scheduled adverts. Configure one with `.advert set all 6h | Your advert text`, then use `.advert on all`.'
+  const names = await groupNameMap(sock)
   const tick = String.fromCharCode(96)
   const lines = active.map(([groupId, config], index) => {
     const nextAt = Number(config.nextAt || 0)
     const next = nextAt > 0 ? new Date(nextAt).toLocaleString() : 'waiting for scheduler'
-    return `${index + 1}. ${tick}${groupId}${tick}\n   Type: *${advertContentType(config)}*\n   Interval: *${formatInterval(config.intervalMs)}*\n   Next broadcast: *${next}*\n   Last delivery: *${config.lastDelivery || 'not sent'}*\n   Sent: *${Number(config.sentCount || 0)}*`
+    return `${index + 1}. *${names.get(groupId) || 'Unnamed group'}*\n   Group ID: ${tick}${groupId}${tick}\n   Type: *${advertContentType(config)}*\n   Interval: *${formatInterval(config.intervalMs)}*\n   Next broadcast: *${next}*\n   Last delivery: *${config.lastDelivery || 'not sent'}*\n   Sent: *${Number(config.sentCount || 0)}*`
   })
   return `📅 *ACTIVE ADVERT SCHEDULE*\n\n${lines.join('\n\n')}`
 }
@@ -483,7 +494,7 @@ async function advertCommand(sock, chatId, message, userMessage, context = {}) {
       }
     }
     if (action === 'schedule' || action === 'next') {
-      return replyInteractive(sock, chatId, message, ownerDmScheduleStatus(state), [
+      return replyInteractive(sock, chatId, message, await ownerDmScheduleStatus(state, sock), [
         { id: '.advert now', label: 'Send enabled now' },
         { id: '.advert status', label: 'All advert status' },
         { id: '.advert off all', label: 'Pause all' }
@@ -549,7 +560,7 @@ Use ".advert on ${bulkTarget}" to enable it.`, [{ id: `.advert on ${bulkTarget}`
           const tick = String.fromCharCode(96)
           const lines = targets.map((target, index) => {
             const config = state.groups[target.jid]
-            return `${index + 1}. ${tick}${target.number}${tick} — *${config ? (config.enabled ? 'ON' : 'OFF') : 'NOT CONFIGURED'}*${config ? `\n   Type: *${advertContentType(config)}*` : ''}`
+            return `${index + 1}. *${target.subject || 'Unnamed group'}*\n   Group ID: ${tick}${target.number}${tick} — *${config ? (config.enabled ? 'ON' : 'OFF') : 'NOT CONFIGURED'}*${config ? `\n   Type: *${advertContentType(config)}*` : ''}`
           })
           return replyInteractive(sock, chatId, message, `📢 *BULK ADVERT STATUS*\n\n${lines.join('\n')}`, [{ id: `.advert on ${bulkTarget}`, label: `Enable ${bulkTarget}` }, { id: `.advert off ${bulkTarget}`, label: `Pause ${bulkTarget}` }])
         }
@@ -691,7 +702,7 @@ Use ".advert on ${bulkTarget}" to enable it.`, [{ id: `.advert on ${bulkTarget}`
     }
     if (action === 'status') {
       const groups = Object.keys(state.groups || {}).filter((jid) => jid.endsWith('@g.us'))
-      return replyInteractive(sock, chatId, message, ownerDmStatus(state), groupActionButtons(groups.map((jid, index) => ({ jid, index: index + 1 }))))
+      return replyInteractive(sock, chatId, message, await ownerDmStatus(state, sock), groupActionButtons(groups.map((jid, index) => ({ jid, index: index + 1 }))))
     }
     if (action === 'now' || action === 'send') {
       const result = await sendEnabledAdverts(sock)

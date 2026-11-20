@@ -69,6 +69,7 @@ test('owner DM schedule lists active adverts and next broadcast times', async ()
     await advert.advertCommand(sock, chatId, message, '.advert schedule', { isOwnerOrSudoCheck: true, isGroup: false })
     const output = sock.sent.at(-1).payload.text
     assert.match(output, /ACTIVE ADVERT SCHEDULE/)
+    assert.match(output, /Sales/)
     assert.match(output, /111@g\.us/)
     assert.match(output, /Type: \*Text\*/)
     assert.match(output, /Next broadcast:/)
