@@ -55,6 +55,12 @@ test('owner DM can configure all or selected groups with one advert', async () =
     assert.equal(state.groups['111@g.us'].message, 'Selected advert')
     assert.equal(state.groups['333@g.us'].message, 'Selected advert')
     assert.equal(state.groups['222@g.us'].message, 'One shared advert')
+
+    await advert.advertCommand(sock, chatId, message, '.advert clear 1,3', context)
+    state = advert.loadState()
+    assert.equal(state.groups['111@g.us'], undefined)
+    assert.equal(state.groups['333@g.us'], undefined)
+    assert.equal(state.groups['222@g.us'].message, 'One shared advert')
   } finally {
     if (original === null) fs.rmSync(advert.SETTINGS_PATH, { force: true })
     else fs.writeFileSync(advert.SETTINGS_PATH, original)

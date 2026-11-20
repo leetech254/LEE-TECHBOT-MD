@@ -180,6 +180,7 @@ function advertHelp() {
     '• `.advert on/off/status/now/clear all` — manage all configured groups',
     '• `.advert all on/off/status/now/clear` — shortcut for all groups',
     '• `.advert clear` — clear all group adverts from owner DM',
+    '• `.advert clear 1,3` — clear selected groups only',
     '• `.advert schedule` — show active adverts and next broadcast times',
     '• `.advert on/off/status/now/clear <group number>` — manage one group',
     '• `.advert status` — view all enabled groups',
