@@ -5,7 +5,7 @@ const path = require('path')
 const crypto = require('crypto')
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys')
 const { resolveAuthDir } = require('../lib/storagePaths')
-const { resolveGroupTarget, fetchParticipatingGroups } = require('../lib/groupTarget')
+const { resolveGroupTarget, fetchParticipatingGroups, normalizeGroupJid } = require('../lib/groupTarget')
 
 // Keep schedules beside the auth files. The existing durable auth store then
 // includes them in the immutable S3/Bucketeer session generations.
@@ -113,6 +113,13 @@ function removeAdvertMedia(media) {
   try { fs.rmSync(path.join(path.dirname(SETTINGS_PATH), file), { force: true }) } catch (_) {}
 }
 
+function removeUnusedAdvertMedia(state, mediaFiles) {
+  const referenced = new Set(Object.values(state.groups || {}).map((config) => config?.media?.file).filter(Boolean))
+  for (const media of mediaFiles) {
+    if (media?.file && !referenced.has(media.file)) removeAdvertMedia(media)
+  }
+}
+
 function parseInterval(value) {
   const raw = String(value || '').trim().toLowerCase().replace(/\s+/g, '')
   const match = raw.match(/^(\d+(?:\.\d+)?)(s|m|h|d)$/)
@@ -157,6 +164,9 @@ function advertHelp() {
     'From the owner DM:',
     '• `.advert groups` — list groups with numbers for DM setup',
     '• `.advert set <group number> 6h | Your advert text` — configure a group',
+    '• `.advert set all 6h | Your advert text` — configure all participating groups',
+    '• `.advert set 1,3 6h | Your advert text` — configure selected groups',
+    '• `.advert on/off/status/now/clear all` — manage all configured groups',
     '• `.advert on/off/status/now/clear <group number>` — manage one group',
     '• `.advert status` — view all enabled groups',
     '• `.advert now` — send each enabled advert immediately',
@@ -260,6 +270,22 @@ function groupActionButtons(targets) {
     { id: `.advert status ${target}`, label: `Status ${target}` },
     { id: `.advert on ${target}`, label: `Enable ${target}` }
   ]
+}
+
+async function resolveAdvertTargets(sock, targetSpec) {
+  const groups = await fetchParticipatingGroups(sock)
+  const raw = String(targetSpec || '').trim()
+  if (raw.toLowerCase() === 'all') return groups
+  const tokens = raw.split(',').map((value) => value.trim()).filter(Boolean)
+  const targets = []
+  for (const token of tokens) {
+    const byIndex = /^\d{1,3}$/.test(token) ? groups[Number(token) - 1] : null
+    const direct = normalizeGroupJid(token)
+    const match = byIndex || groups.find((group) => direct && group.jid === direct)
+    if (!match) throw new Error(`No participating group matches "${token}". Use .advert groups first.`)
+    if (!targets.some((group) => group.jid === match.jid)) targets.push(match)
+  }
+  return targets
 }
 
 function channelActionButtons() {
@@ -416,6 +442,70 @@ async function advertCommand(sock, chatId, message, userMessage, context = {}) {
     }
     // DM group syntax: `.advert set <list number|full group number> 6h | text`
     // and `.advert on|off|status|now|clear <target>`.
+    const bulkCommands = ['set', 'configure', 'add', 'on', 'start', 'resume', 'off', 'stop', 'pause', 'status', 'now', 'send', 'clear', 'delete', 'remove']
+    const bulkTarget = action === 'all' ? 'all' : String(args[0] || '')
+    const bulkAction = action === 'all' ? 'set' : action
+    const bulkSpec = bulkTarget.toLowerCase() === 'all' || bulkTarget.includes(',')
+    if (bulkSpec && bulkCommands.includes(bulkAction)) {
+      try {
+        const targets = await resolveAdvertTargets(sock, bulkTarget)
+        if (!targets.length) return reply(sock, chatId, message, '📢 No participating groups were found.')
+        const targetIds = targets.map((target) => target.jid)
+        const targetLabel = bulkTarget.toLowerCase() === 'all' ? `all ${targets.length} participating groups` : `${targets.length} selected groups`
+        if (['set', 'configure', 'add'].includes(bulkAction)) {
+          const payload = action === 'all' ? args.join(' ') : args.slice(1).join(' ')
+          const separator = payload.indexOf('|')
+          const intervalMs = parseInterval(separator < 0 ? payload : payload.slice(0, separator))
+          const advertText = separator < 0 ? captionFromCommand(message) : payload.slice(separator + 1).trim()
+          const hasMedia = Boolean(mediaFromCommand(message))
+          if (!intervalMs) return reply(sock, chatId, message, '❌ Invalid interval. Use `.advert set all 6h | Your advert text` or `.advert set 1,3 6h | Your advert text`.')
+          if (advertText.length > 2000) return reply(sock, chatId, message, '❌ Advert caption must not exceed 2000 characters.')
+          let media = null
+          if (hasMedia) {
+            try { media = await saveAdvertMedia(message, 'broadcast') } catch (error) { return reply(sock, chatId, message, `❌ Could not save the advert image: ${error.message || error}`) }
+          }
+          if (!advertText && !media) return reply(sock, chatId, message, '❌ Add advert text or reply to an image.')
+          const oldMedia = []
+          for (const groupId of targetIds) {
+            const current = state.groups[groupId]
+            if (current?.media) oldMedia.push(current.media)
+            state.groups[groupId] = { enabled: false, intervalMs, message: advertText || '', media, nextAt: Date.now() + intervalMs, sentCount: Number(current?.sentCount || 0), updatedAt: Date.now() }
+          }
+          const saved = saveState(state)
+          if (saved) removeUnusedAdvertMedia(state, oldMedia)
+          return replyInteractive(sock, chatId, message, `${saved ? '✅' : '⚠️'} One advert ${saved ? 'saved' : 'prepared but not persisted'} for *${targetLabel}* and is currently *OFF*.
+Use ".advert on ${bulkTarget}" to enable it.`, [{ id: `.advert on ${bulkTarget}`, label: `Enable ${bulkTarget}` }, { id: `.advert status ${bulkTarget}`, label: 'View status' }])
+        }
+        if (['clear', 'delete', 'remove'].includes(bulkAction)) {
+          const oldMedia = []
+          for (const groupId of targetIds) { if (state.groups[groupId]?.media) oldMedia.push(state.groups[groupId].media); delete state.groups[groupId] }
+          const saved = saveState(state)
+          if (saved) removeUnusedAdvertMedia(state, oldMedia)
+          return reply(sock, chatId, message, saved ? `✅ Advert removed from ${targetLabel}.` : '⚠️ Could not persist the removal because storage is full.')
+        }
+        if (bulkAction === 'status') {
+          const tick = String.fromCharCode(96)
+          const lines = targets.map((target, index) => {
+            const config = state.groups[target.jid]
+            return `${index + 1}. ${tick}${target.number}${tick} — *${config ? (config.enabled ? 'ON' : 'OFF') : 'NOT CONFIGURED'}*`
+          })
+          return replyInteractive(sock, chatId, message, `📢 *BULK ADVERT STATUS*\n\n${lines.join('\n')}`, [{ id: `.advert on ${bulkTarget}`, label: `Enable ${bulkTarget}` }, { id: `.advert off ${bulkTarget}`, label: `Pause ${bulkTarget}` }])
+        }
+        if (['on', 'start', 'resume', 'off', 'stop', 'pause'].includes(bulkAction)) {
+          const enabled = ['on', 'start', 'resume'].includes(bulkAction)
+          let changed = 0
+          for (const groupId of targetIds) if (state.groups[groupId]) { state.groups[groupId].enabled = enabled; if (enabled) state.groups[groupId].nextAt = Math.max(Date.now() + state.groups[groupId].intervalMs, Number(state.groups[groupId].nextAt || 0)); changed += 1 }
+          const saved = saveState(state)
+          return reply(sock, chatId, message, saved ? `✅ Advertising ${enabled ? 'enabled' : 'paused'} for ${changed} configured group(s) in ${targetLabel}.` : '⚠️ Could not persist the setting because storage is full.')
+        }
+        if (['now', 'send'].includes(bulkAction)) {
+          const results = await Promise.all(targetIds.filter((groupId) => state.groups[groupId]?.enabled === true).map((groupId) => sendAdvert(sock, groupId, state.groups[groupId], true)))
+          return reply(sock, chatId, message, `✅ Sent adverts to *${results.filter(Boolean).length}/${results.length}* enabled group(s) in ${targetLabel}.`)
+        }
+      } catch (error) {
+        return reply(sock, chatId, message, `❌ Bulk advert operation failed: ${error.message || error}`)
+      }
+    }
     const targetCandidate = String(args[0] || '')
     const targetLike = /^\d{1,3}$/.test(targetCandidate) || /^\d+[-\d]*@g\.us$/i.test(targetCandidate) || /^\d{4,}[-\d]*$/.test(targetCandidate)
     const targetAction = action === 'group' || (['set', 'configure', 'add', 'on', 'start', 'resume', 'off', 'stop', 'pause', 'status', 'now', 'send', 'clear', 'delete', 'remove'].includes(action) && targetLike)
