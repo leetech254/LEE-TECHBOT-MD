@@ -68,7 +68,11 @@ function unwrapMessage(content) {
 }
 
 function quotedContent(message) {
-  return message?.message?.extendedTextMessage?.contextInfo?.quotedMessage || null
+  const direct = unwrapMessage(message?.message)
+  return direct?.extendedTextMessage?.contextInfo?.quotedMessage
+    || direct?.imageMessage?.contextInfo?.quotedMessage
+    || direct?.videoMessage?.contextInfo?.quotedMessage
+    || null
 }
 
 function mediaFromCommand(message) {
@@ -177,6 +181,8 @@ function advertHelp() {
     '• `.advert set <group number> 6h | Your advert text` — configure a group',
     '• `.advert set all 6h | Your advert text` — configure all participating groups',
     '• `.advert set 1,3 6h | Your advert text` — configure selected groups',
+    '• Reply to an image in owner DM with `.advert set all 6h` or `.advert set 1,3 6h`',
+    '• Add a caption with `.advert set all 6h | Caption text`',
     '• `.advert on/off/status/now/clear all` — manage all configured groups',
     '• `.advert all on/off/status/now/clear` — shortcut for all groups',
     '• `.advert clear` — clear all group adverts from owner DM',
