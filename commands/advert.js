@@ -178,6 +178,7 @@ function advertHelp() {
     '• `.advert set all 6h | Your advert text` — configure all participating groups',
     '• `.advert set 1,3 6h | Your advert text` — configure selected groups',
     '• `.advert on/off/status/now/clear all` — manage all configured groups',
+    '• `.advert schedule` — show active adverts and next broadcast times',
     '• `.advert on/off/status/now/clear <group number>` — manage one group',
     '• `.advert status` — view all enabled groups',
     '• `.advert now` — send each enabled advert immediately',
@@ -222,6 +223,20 @@ function ownerDmStatus(state) {
     return `${index + 1}. ${tick}${groupId}${tick}\n   Status: *${stateLabel}* | Delivery: *${delivery}* | Sent: *${Number(config.sentCount || 0)}*\n   Next: ${next}`
   })
   return `📢 *ADVERT GROUPS*\n\n${lines.join('\n\n')}`
+}
+
+function ownerDmScheduleStatus(state) {
+  const active = Object.entries(state.groups || {}).filter(([groupId, config]) => (
+    groupId.endsWith('@g.us') && config?.enabled === true && (config.message || config.media) && config.intervalMs
+  ))
+  if (!active.length) return '📢 No active scheduled adverts. Configure one with `.advert set all 6h | Your advert text`, then use `.advert on all`.'
+  const tick = String.fromCharCode(96)
+  const lines = active.map(([groupId, config], index) => {
+    const nextAt = Number(config.nextAt || 0)
+    const next = nextAt > 0 ? new Date(nextAt).toLocaleString() : 'waiting for scheduler'
+    return `${index + 1}. ${tick}${groupId}${tick}\n   Interval: *${formatInterval(config.intervalMs)}*\n   Next broadcast: *${next}*\n   Last delivery: *${config.lastDelivery || 'not sent'}*\n   Sent: *${Number(config.sentCount || 0)}*`
+  })
+  return `📅 *ACTIVE ADVERT SCHEDULE*\n\n${lines.join('\n\n')}`
 }
 
 function existingChannelJids() {
@@ -451,6 +466,13 @@ async function advertCommand(sock, chatId, message, userMessage, context = {}) {
       } catch (error) {
         return reply(sock, chatId, message, `❌ Could not list groups: ${error.message || error}`)
       }
+    }
+    if (action === 'schedule' || action === 'next') {
+      return replyInteractive(sock, chatId, message, ownerDmScheduleStatus(state), [
+        { id: '.advert now', label: 'Send enabled now' },
+        { id: '.advert status', label: 'All advert status' },
+        { id: '.advert off all', label: 'Pause all' }
+      ])
     }
     // DM group syntax: `.advert set <list number|full group number> 6h | text`
     // and `.advert on|off|status|now|clear <target>`.
