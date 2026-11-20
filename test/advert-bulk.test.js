@@ -45,6 +45,11 @@ test('owner DM can configure all or selected groups with one advert', async () =
     assert.equal(state.groups['111@g.us'].enabled, true)
     assert.equal(state.groups['333@g.us'].enabled, true)
 
+    await advert.advertCommand(sock, chatId, message, '.advert all off', context)
+    state = advert.loadState()
+    assert.equal(state.groups['111@g.us'].enabled, false)
+    assert.equal(state.groups['333@g.us'].enabled, false)
+
     await advert.advertCommand(sock, chatId, message, '.advert set 1,3 2h | Selected advert', context)
     state = advert.loadState()
     assert.equal(state.groups['111@g.us'].message, 'Selected advert')

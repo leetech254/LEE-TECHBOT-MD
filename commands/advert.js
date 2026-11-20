@@ -178,6 +178,7 @@ function advertHelp() {
     '• `.advert set all 6h | Your advert text` — configure all participating groups',
     '• `.advert set 1,3 6h | Your advert text` — configure selected groups',
     '• `.advert on/off/status/now/clear all` — manage all configured groups',
+    '• `.advert all on/off/status/now/clear` — shortcut for all groups',
     '• `.advert schedule` — show active adverts and next broadcast times',
     '• `.advert on/off/status/now/clear <group number>` — manage one group',
     '• `.advert status` — view all enabled groups',
@@ -478,7 +479,8 @@ async function advertCommand(sock, chatId, message, userMessage, context = {}) {
     // and `.advert on|off|status|now|clear <target>`.
     const bulkCommands = ['set', 'configure', 'add', 'on', 'start', 'resume', 'off', 'stop', 'pause', 'status', 'now', 'send', 'clear', 'delete', 'remove']
     const bulkTarget = action === 'all' ? 'all' : String(args[0] || '')
-    const bulkAction = action === 'all' ? 'set' : action
+    const allActionAliases = ['on', 'start', 'resume', 'off', 'stop', 'pause', 'status', 'now', 'send', 'clear', 'delete', 'remove']
+    const bulkAction = action === 'all' ? (allActionAliases.includes(String(args[0] || '').toLowerCase()) ? String(args[0]).toLowerCase() : 'set') : action
     const bulkSpec = bulkTarget.toLowerCase() === 'all' || bulkTarget.includes(',')
     if (bulkSpec && bulkCommands.includes(bulkAction)) {
       try {
