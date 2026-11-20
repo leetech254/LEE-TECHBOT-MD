@@ -52,9 +52,11 @@ const { normalizeWhatsAppNumber } = require('./lib/phone')
 const { restoreSessionBundle } = require('./lib/sessionBundle')
 const { createDurableAuthStore } = require('./lib/durableAuthStore')
 const { resolveAuthDir } = require('./lib/storagePaths')
+const { acquireProcessLock } = require('./lib/processLock')
 const { resolveHostPairingMode, resolveHostMenuChoice, resolvePairingWebStartupMode, resolveHostPairingPort, shouldAutoStartPairingWeb, renderTerminalQr } = require('./lib/hostPairing')
 const { CHANNEL_LINKS, createChannelAutomation } = require('./lib/channelAutomation')
 const { createHostPairingServer } = require('./lib/hostPairingWeb')
+const { diskStatus } = require('./lib/systemDiagnostics')
 const { activePrefix, menuShortcutButtons } = require('./lib/menuShortcuts')
 const selfChatModule = require('./lib/selfChat')
 const { selfChatSendOptions, isSelfChat, createSelfChatSendQueue } = selfChatModule
@@ -223,6 +225,15 @@ let owner = readJson('./data/owner.json', { owner: settings.ownerNumber || '' })
 global.botname = "LEE TECH BOT"
 global.themeemoji = "•"
 const authDir = resolveAuthDir(process.env)
+let authProcessLock
+try {
+    authProcessLock = acquireProcessLock(authDir)
+    console.log(`[process-lock] Auth directory lock acquired for ${authDir}.`)
+} catch (error) {
+    console.error(`[process-lock] ${error.message || error}`)
+    process.exit(1)
+}
+process.once('exit', () => { try { authProcessLock?.release?.() } catch (_) {} })
 let durableAuthStore
 let durableAuthStoreConfigError = null
 try {
@@ -265,6 +276,7 @@ async function gracefulShutdown(signal) {
     } catch (error) {
         console.error(`[shutdown] ${signal}: durable auth flush failed: ${error.message || error}`)
     } finally {
+        try { authProcessLock?.release?.() } catch (_) {}
         process.exit(0)
     }
 }
@@ -434,6 +446,7 @@ function startHostPairingWebServer() {
         initialMode: hostWebPairingMode || '',
         getRuntime: () => hostPairingRuntime,
         getStorageStatus: () => durableAuthStore.status?.() || {},
+        getDiagnostics: () => ({ disk: diskStatus(process.cwd()), ok: !durableAuthStore.status?.().error }),
         onMode: async (mode) => {
             hostWebPairingMode = mode
             hostWebPairing401Retries = 0

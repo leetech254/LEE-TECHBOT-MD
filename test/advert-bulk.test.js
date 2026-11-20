@@ -95,3 +95,37 @@ test('bulk image command reads the replied image caption and supports inline cap
   assert.equal(advert.mediaFromCommand(wrappedReply).type, 'image')
   assert.equal(advert.captionFromCommand(wrappedReply), 'Wrapped image caption')
 })
+
+test('owner DM bulk edit updates selected groups and preserves each enabled state', async () => {
+  const original = fs.existsSync(advert.SETTINGS_PATH) ? fs.readFileSync(advert.SETTINGS_PATH) : null
+  try {
+    fs.rmSync(advert.SETTINGS_PATH, { force: true })
+    advert.saveState({ version: 1, groups: {
+      '111@g.us': { enabled: true, intervalMs: 3600000, message: 'Old sales' },
+      '222@g.us': { enabled: false, intervalMs: 3600000, message: 'Old support' },
+      '333@g.us': { enabled: true, intervalMs: 3600000, message: 'Old news' }
+    } })
+    const sock = socket()
+    const chatId = '254700000000@s.whatsapp.net'
+    const message = { key: { remoteJid: chatId }, message: { conversation: '.advert edit 1,3 2h | Updated selected' } }
+    const context = { isOwnerOrSudoCheck: true, isGroup: false }
+    await advert.advertCommand(sock, chatId, message, '.advert edit 1,3 2h | Updated selected', context)
+    let state = advert.loadState()
+    assert.equal(state.groups['111@g.us'].message, 'Updated selected')
+    assert.equal(state.groups['333@g.us'].message, 'Updated selected')
+    assert.equal(state.groups['111@g.us'].enabled, true)
+    assert.equal(state.groups['333@g.us'].enabled, true)
+    assert.equal(state.groups['222@g.us'].message, 'Old support')
+    await advert.advertCommand(sock, chatId, message, '.advert edit all 3h | Updated all', context)
+    state = advert.loadState()
+    assert.equal(state.groups['111@g.us'].message, 'Updated all')
+    assert.equal(state.groups['222@g.us'].message, 'Updated all')
+    assert.equal(state.groups['333@g.us'].message, 'Updated all')
+    assert.equal(state.groups['111@g.us'].enabled, true)
+    assert.equal(state.groups['222@g.us'].enabled, false)
+    assert.equal(state.groups['333@g.us'].enabled, true)
+  } finally {
+    if (original === null) fs.rmSync(advert.SETTINGS_PATH, { force: true })
+    else fs.writeFileSync(advert.SETTINGS_PATH, original)
+  }
+})

@@ -227,7 +227,7 @@ const linkCommand = require('./commands/link');
 const systemCommand = require('./commands/system');
 const { paymentCommand, setPaymentCommand } = require('./commands/payment');
 const { designCommand } = require('./commands/design');
-const { speedCommand, uptimeCommand, idCommand, botInfoCommand, healthCommand } = require('./commands/utility');
+const { speedCommand, uptimeCommand, idCommand, botInfoCommand, healthCommand, systemStatusCommand, storageStatusCommand } = require('./commands/utility');
 const { menuCompatCommand } = require('./commands/menuCompat');
 const downloadCommand = require('./commands/download');
 const adminStatusCommand = require('./commands/adminstatus');
@@ -532,7 +532,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
         const adminCommands = ['.add', '.groupvcf', '.savecontacts', '.extract', '.mute', '.unmute', '.link', '.ban', '.unban', '.promote', '.promotemsg', '.promotion', '.promotions', '.antidemote', '.demote', '.kick', '.out', '.antifake', '.tagall', '.tagnotadmin', '.all', '.contacttag', '.tagadmin', '.hidetag', '.antilink', '.antiphoto', '.antisticker', '.antitag', '.antimention', '.setgdesc', '.setgname', '.setgpp', '.kickall'];
         const isAdminCommand = adminCommands.includes(commandToken);
 
-        const ownerCommands = ['.mode', '.autostatus', '.autoviewstatus', '.autolikestatus', '.antidelete', '.cleartmp', '.setpp', '.tostatus', '.togstatus', '.clearsession', '.creategroup', '.areact', '.autoreact', '.decrypt', '.autotyping', '.autoread', '.pmblocker', '.update', '.antiban', '.setpayment', '.setprefix', '.hidechannel', '.maintenance', '.ownerstatus', '.setmenuimage', '.setmenu', '.menumode', '.menustyle', '.menufont', '.advert'];
+        const ownerCommands = ['.mode', '.autostatus', '.autoviewstatus', '.autolikestatus', '.antidelete', '.cleartmp', '.setpp', '.tostatus', '.togstatus', '.clearsession', '.creategroup', '.areact', '.autoreact', '.decrypt', '.autotyping', '.autoread', '.pmblocker', '.update', '.antiban', '.setpayment', '.setprefix', '.hidechannel', '.maintenance', '.ownerstatus', '.systemstatus', '.storage', '.setmenuimage', '.setmenu', '.menumode', '.menustyle', '.menufont', '.advert'];
         const isOwnerCommand = ownerCommands.some(cmd => userMessage.startsWith(cmd));
 
         if (isGroup && isAdminCommand) {
@@ -862,6 +862,14 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
             case userMessage === '.settings' || userMessage.startsWith('.settings '):
                 await settingsCommand(sock, chatId, message, userMessage.trim().split(/\s+/)[1] || '');
+                commandExecuted = true;
+                break;
+            case userMessage.startsWith('.systemstatus'):
+                await systemStatusCommand(sock, chatId, message);
+                commandExecuted = true;
+                break;
+            case userMessage.startsWith('.storage'):
+                await storageStatusCommand(sock, chatId, message, userMessage);
                 commandExecuted = true;
                 break;
             case userMessage.startsWith('.hidechannel') || userMessage.startsWith('.maintenance') || userMessage.startsWith('.ownerstatus'):

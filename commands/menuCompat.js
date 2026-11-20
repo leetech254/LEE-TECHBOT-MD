@@ -9,7 +9,7 @@ const cheerio = require('cheerio');
 const aiCommand = require('./ai');
 const animeCommand = require('./anime').animeCommand;
 const downloadCommand = require('./download');
-const { speedCommand, uptimeCommand, idCommand, botInfoCommand, healthCommand } = require('./utility');
+const { speedCommand, uptimeCommand, idCommand, botInfoCommand, healthCommand, systemStatusCommand, storageStatusCommand } = require('./utility');
 const quoteCommand = require('./quote');
 const factCommand = require('./fact');
 const { truthCommand } = require('./truth');
@@ -148,6 +148,8 @@ async function handleSimpleLocal(sock, chatId, message, command, args, context =
     if (command === 'jid' || command === 'group-id' || command === 'channel-id') return idCommand(sock, chatId, message);
     if (command === 'botinfo' || command === 'script') return botInfoCommand(sock, chatId, message);
     if (command === 'health') return healthCommand(sock, chatId, message);
+    if (command === 'systemstatus') return systemStatusCommand(sock, chatId, message);
+    if (command === 'storage') return storageStatusCommand(sock, chatId, message, `.${command} ${args.join(' ')}`);
     if (command === 'quotes' || command === 'quote') return quoteCommand(sock, chatId, message);
     if (command === 'fact') return factCommand(sock, chatId, message);
     if (command === 'truth') return truthCommand(sock, chatId, message);

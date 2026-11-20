@@ -46,6 +46,17 @@
 > **Node.js:** 20 or newer.
 > **Important:** Free hosts may sleep, restart, or delete storage. Keep the bot’s auth/session directory persistent and run one instance only.
 
+### Production diagnostics
+
+Owner-only commands help verify deployment safety without exposing credentials:
+
+- `.systemstatus` shows the detected host, Node.js process, memory, disk pressure, session storage mode, and whether a restart is safe.
+- `.storage` shows local-volume and S3/Bucketeer backup state.
+- `.storage test` performs a temporary local write test and verifies durable-provider access when configured.
+- `/health` exposes a safe machine-readable readiness response for host monitoring. It never returns S3 credentials, pairing codes, QR data, or phone numbers.
+
+The bot also acquires a lock inside `AUTH_DIR` so two processes cannot use the same WhatsApp session simultaneously. Startup cleanup removes only safe temporary files, stale caches, partial downloads, old logs, and expired Bad-MAC recovery folders; it never removes the active auth directory.
+
 ### One-click Heroku deployment
 
 Use the **Deploy to Heroku** button above. Heroku reads `app.json`, creates the app automatically, provisions the Bucketeer S3 add-on, installs Node.js dependencies, and starts exactly one `web` dyno. `OWNER_NUMBER` is optional: leave it empty to let the paired WhatsApp account be recognized from the active linked session, or enter the owner’s international number for an explicit authorization fallback. Bucketeer automatically injects the S3 bucket and credentials into the app as `BUCKETEER_*` Config Vars. The bot detects those variables automatically, verifies bucket access before opening WhatsApp, restores the latest session, and completes an initial backup before connecting. If the bucket or credentials are unavailable, startup fails instead of allowing a new pairing that could be lost. Bucketeer is a paid Heroku add-on, so review its current plan price before confirming deployment. Pair the bot at the new app URL followed by `/pairing`.

@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { resolveAuthDir } = require('../lib/storagePaths');
-const { cleanupUnwantedFiles } = require('../lib/diskCleanup');
+const { cleanupUnwantedFiles, diskPressure } = require('../lib/diskCleanup');
 
 const entry = path.resolve(process.env.BOT_ENTRY || path.join(process.cwd(), 'index.js'));
 const authDir = resolveAuthDir(process.env);
@@ -27,6 +27,8 @@ function cleanupStartupArtifacts() {
             authDir
         });
         if (removed.length) log(`Removed ${removed.length} safe temporary/cache artifact(s) before startup.`);
+        const pressure = diskPressure(process.cwd());
+        if (pressure.level !== 'ok') log(`Disk pressure is ${pressure.level} (${pressure.usedPercent ?? 'unknown'}% used). Session writes may fail until space is freed.`);
     } catch (error) {
         console.warn(`[session-recovery] Could not clean temporary artifacts: ${error.message}`);
     }
