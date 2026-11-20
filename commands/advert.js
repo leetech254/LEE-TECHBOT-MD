@@ -716,6 +716,8 @@ module.exports = {
   MIN_INTERVAL_MS,
   MAX_INTERVAL_MS,
   parseInterval,
+  mediaFromCommand,
+  captionFromCommand,
   loadState,
   saveState,
   advertCommand,

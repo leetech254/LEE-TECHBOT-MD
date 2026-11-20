@@ -55,3 +55,19 @@ test('owner DM can configure all or selected groups with one advert', async () =
     else fs.writeFileSync(advert.SETTINGS_PATH, original)
   }
 })
+
+test('bulk image command reads the replied image caption and supports inline captions', () => {
+  const replied = {
+    message: {
+      extendedTextMessage: {
+        text: '.advert set all 6h',
+        contextInfo: { quotedMessage: { imageMessage: { caption: 'Caption from the original image' } } }
+      }
+    }
+  }
+  assert.equal(advert.mediaFromCommand(replied).type, 'image')
+  assert.equal(advert.captionFromCommand(replied), 'Caption from the original image')
+
+  const inline = { message: { imageMessage: { caption: 'Buy now\nhttps://example.com' } } }
+  assert.equal(advert.captionFromCommand(inline), 'Buy now\nhttps://example.com')
+})
