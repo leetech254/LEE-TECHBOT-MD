@@ -366,6 +366,8 @@ async function handleMessages(sock, messageUpdate, printLog) {
             message.message?.extendedTextMessage?.text ||
             message.message?.imageMessage?.caption ||
             message.message?.videoMessage?.caption ||
+            message.message?.buttonsResponseMessage?.selectedButtonId ||
+            message.message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
             '');
 
         // Fast lane: these read-only commands do not need group metadata or

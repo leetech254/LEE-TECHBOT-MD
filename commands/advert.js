@@ -193,11 +193,12 @@ async function sendEnabledAdverts(sock) {
 function ownerDmStatus(state) {
   const groups = Object.entries(state.groups).filter(([groupId, config]) => groupId.endsWith('@g.us') && (config?.message || config?.media))
   if (!groups.length) return '📢 No advert groups are configured yet. Use `.advert set 6h | Your advert text` inside a group.'
+  const tick = String.fromCharCode(96)
   const lines = groups.map(([groupId, config], index) => {
     const stateLabel = config.enabled ? 'ON' : 'OFF'
     const delivery = config.lastDelivery || 'not sent'
     const next = config.enabled && config.nextAt ? new Date(config.nextAt).toLocaleString() : 'paused'
-    return `${index + 1}. ${groupId}\n   Status: *${stateLabel}* | Delivery: *${delivery}* | Sent: *${Number(config.sentCount || 0)}*\n   Next: ${next}`
+    return `${index + 1}. ${tick}${groupId}${tick}\n   Status: *${stateLabel}* | Delivery: *${delivery}* | Sent: *${Number(config.sentCount || 0)}*\n   Next: ${next}`
   })
   return `📢 *ADVERT GROUPS*\n\n${lines.join('\n\n')}`
 }
@@ -223,7 +224,50 @@ function availableChannelJids() {
 
 function formatChannelList(available, selected = new Set()) {
   if (!available.length) return 'No already-followed channels are available yet. Follow a channel first, then try again.'
-  return available.map((jid, index) => `${index + 1}. ${jid} — ${selected.has(jid) ? '*selected*' : 'available'}`).join('\n')
+  const tick = String.fromCharCode(96)
+  return available.map((jid, index) => `${index + 1}. ${tick}${jid}${tick} — ${selected.has(jid) ? '*selected*' : 'available'}`).join('\n')
+}
+
+function advertButtons(buttons) {
+  return buttons.slice(0, 3).map(({ id, label }) => ({
+    buttonId: id,
+    buttonText: { displayText: label },
+    type: 1
+  }))
+}
+
+async function replyInteractive(sock, chatId, message, text, buttons = []) {
+  if (!buttons.length) return reply(sock, chatId, message, text)
+  const payload = {
+    text,
+    footer: 'LEE TECH BOT • Tap a button or copy an ID from the message',
+    buttons: advertButtons(buttons),
+    headerType: 1
+  }
+  try {
+    return await sock.sendMessage(chatId, payload, { quoted: message })
+  } catch (_) {
+    return reply(sock, chatId, message, text)
+  }
+}
+
+function groupActionButtons(targets) {
+  const first = targets[0]
+  if (!first) return []
+  const target = first.index || 1
+  return [
+    { id: `.advert set ${target} 6h | Your advert text`, label: `Set group ${target}` },
+    { id: `.advert status ${target}`, label: `Status ${target}` },
+    { id: `.advert on ${target}`, label: `Enable ${target}` }
+  ]
+}
+
+function channelActionButtons() {
+  return [
+    { id: '.advert channel all', label: 'Select all channels' },
+    { id: '.advert channel on', label: 'Enable forwarding' },
+    { id: '.advert channel off', label: 'Disable forwarding' }
+  ]
 }
 
 function configuredChannelJids(state) {
@@ -363,9 +407,9 @@ async function advertCommand(sock, chatId, message, userMessage, context = {}) {
         if (!groups.length) return reply(sock, chatId, message, '📢 The bot is not participating in any groups.')
         const lines = groups.map((group) => {
           const config = state.groups[group.jid]
-          return `${group.index}. *${group.subject}*\n   Group: ${group.number}\n   Advert: *${config?.enabled ? 'ON' : config ? 'OFF' : 'NOT CONFIGURED'}*`
+          return `${group.index}. *${group.subject}*\n   Group: \`${group.number}\`\n   Advert: *${config?.enabled ? 'ON' : config ? 'OFF' : 'NOT CONFIGURED'}*`
         })
-        return reply(sock, chatId, message, `📋 *ADVERT GROUPS*\n\n${lines.join('\n\n')}\n\nUse: .advert set <list number> 6h | Your advert text`)
+        return replyInteractive(sock, chatId, message, `📋 *ADVERT GROUPS*\n\n${lines.join('\n\n')}\n\nCopy a group ID above, or use the list number.\nExample: .advert set 1 6h | Your advert text`, groupActionButtons(groups))
       } catch (error) {
         return reply(sock, chatId, message, `❌ Could not list groups: ${error.message || error}`)
       }
@@ -447,14 +491,14 @@ async function advertCommand(sock, chatId, message, userMessage, context = {}) {
       if (channelAction === 'status') {
         const available = availableChannelJids()
         const selected = selectedChannelJids(state)
-        return reply(sock, chatId, message, `📢 *CHANNEL ADVERT SETTINGS*\n\nForwarding: *${state.channelForwardingEnabled === true ? 'ON' : 'OFF'}*\nSelected: *${configuredChannelJids(state).size}* | Available: *${available.length}*\n\n${formatChannelList(available, selected)}\n\nUse .advert channel add <JID>, remove <JID|all>, or all.`)
+        return replyInteractive(sock, chatId, message, `📢 *CHANNEL ADVERT SETTINGS*\n\nForwarding: *${state.channelForwardingEnabled === true ? 'ON' : 'OFF'}*\nSelected: *${configuredChannelJids(state).size}* | Available: *${available.length}*\n\n${formatChannelList(available, selected)}\n\nCopy a channel ID above. Use .advert channel add <JID>, remove <JID|all>, or all.`, channelActionButtons())
       }
       if (channelAction === 'on' || channelAction === 'enable' || channelAction === 'start') {
         state.channelForwardingEnabled = true
         const available = availableChannelJids()
         if (!selectedChannelJids(state).size) state.channelJids = available
         saveState(state)
-        return reply(sock, chatId, message, `✅ Channel forwarding is ON.\n\nAvailable channels:\n${formatChannelList(available, selectedChannelJids(state))}\n\nUse .advert channel remove <JID> to exclude one or remove all to clear the sources.`)
+        return replyInteractive(sock, chatId, message, `✅ Channel forwarding is ON.\n\nAvailable channels:\n${formatChannelList(available, selectedChannelJids(state))}\n\nCopy a channel ID above. Use .advert channel remove <JID> to exclude one or remove all to clear the sources.`, channelActionButtons())
       }
       if (channelAction === 'off' || channelAction === 'disable' || channelAction === 'stop') {
         state.channelForwardingEnabled = false
@@ -465,7 +509,7 @@ async function advertCommand(sock, chatId, message, userMessage, context = {}) {
         state.channelJids = availableChannelJids()
         state.channelForwardingEnabled = true
         saveState(state)
-        return reply(sock, chatId, message, `✅ All *${state.channelJids.length}* available channel(s) selected and forwarding enabled.`)
+        return replyInteractive(sock, chatId, message, `✅ All *${state.channelJids.length}* available channel(s) selected and forwarding enabled.`, [{ id: '.advert channel status', label: 'View channel status' }, { id: '.advert channel off', label: 'Disable forwarding' }])
       }
       if (channelAction === 'add' || channelAction === 'remove') {
         const channelJid = String(args[1] || '').trim()
@@ -493,14 +537,21 @@ async function advertCommand(sock, chatId, message, userMessage, context = {}) {
       saveState(state)
       return reply(sock, chatId, message, `✅ Channel forwarding enabled. Updates from ${channelJid} will be sent to every enabled advert group.`)
     }
-    if (action === 'status') return reply(sock, chatId, message, ownerDmStatus(state))
+    if (action === 'status') {
+      const groups = Object.keys(state.groups || {}).filter((jid) => jid.endsWith('@g.us'))
+      return replyInteractive(sock, chatId, message, ownerDmStatus(state), groupActionButtons(groups.map((jid, index) => ({ jid, index: index + 1 }))))
+    }
     if (action === 'now' || action === 'send') {
       const result = await sendEnabledAdverts(sock)
       return reply(sock, chatId, message, result.total
         ? `✅ Advert broadcast complete.\nSent: *${result.sent}/${result.total}* enabled groups.${result.failed ? `\nFailed and scheduled for retry: *${result.failed}*.` : ''}`
         : '📢 No enabled advert groups were found. Configure one with `.advert set 6h | Your advert text` inside a group.')
     }
-    return reply(sock, chatId, message, '📢 From owner DM use `.advert status` to view all groups or `.advert now` to send to every enabled group. Configure adverts inside each target group.')
+    return replyInteractive(sock, chatId, message, '📢 From owner DM use `.advert groups` to list groups, `.advert status` to view saved adverts, or `.advert now` to send to every enabled group. Configure adverts inside each target group.', [
+      { id: '.advert groups', label: 'List groups' },
+      { id: '.advert status', label: 'Advert status' },
+      { id: '.advert now', label: 'Send enabled now' }
+    ])
   }
 
   const current = state.groups[chatId]
