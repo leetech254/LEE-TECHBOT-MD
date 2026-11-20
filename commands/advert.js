@@ -265,6 +265,20 @@ async function ownerDmScheduleStatus(state, sock) {
   return `📅 *ACTIVE ADVERT SCHEDULE*\n\n${lines.join('\n\n')}`
 }
 
+async function ownerDmEditList(state, sock) {
+  const configured = Object.entries(state.groups || {}).filter(([groupId, config]) => (
+    groupId.endsWith('@g.us') && (config?.message || config?.media)
+  ))
+  if (!configured.length) return '📢 No adverts are configured. Use `.advert set all 6h | Your advert text` to create one.'
+  const names = await groupNameMap(sock)
+  const tick = String.fromCharCode(96)
+  const lines = configured.map(([groupId, config], index) => {
+    const content = String(config.message || (config.media ? '(image advert)' : '')).replace(/\r?\n/g, ' ').slice(0, 160)
+    return `${index + 1}. *${names.get(groupId) || 'Unnamed group'}*\n   Group ID: ${tick}${groupId}${tick}\n   Type: *${advertContentType(config)}* | Status: *${config.enabled ? 'ON' : 'OFF'}*\n   Content: ${content}`
+  })
+  return `✏️ *EDIT ADVERTS*\n\n${lines.join('\n\n')}\n\nUpdate with: .advert edit <number|all|1,3> 6h | New text\nReply to an image to replace the image content.`
+}
+
 function existingChannelJids() {
   const channelStatePath = path.join(path.dirname(SETTINGS_PATH), '.channel-automation.json')
   try {
@@ -500,6 +514,13 @@ async function advertCommand(sock, chatId, message, userMessage, context = {}) {
         { id: '.advert off all', label: 'Pause all' }
       ])
     }
+    if (action === 'edit' && args.length === 0) {
+      return replyInteractive(sock, chatId, message, await ownerDmEditList(state, sock), [
+        { id: '.advert edit all 6h | New text', label: 'Edit all adverts' },
+        { id: '.advert status', label: 'View status' },
+        { id: '.advert groups', label: 'List groups' }
+      ])
+    }
     if (action === 'clear' && args.length === 0) {
       const oldMedia = Object.values(state.groups || {}).map((config) => config?.media).filter(Boolean)
       const removed = Object.keys(state.groups || {}).filter((groupId) => groupId.endsWith('@g.us')).length
@@ -514,7 +535,7 @@ async function advertCommand(sock, chatId, message, userMessage, context = {}) {
     }
     // DM group syntax: `.advert set <list number|full group number> 6h | text`
     // and `.advert on|off|status|now|clear <target>`.
-    const bulkCommands = ['set', 'configure', 'add', 'on', 'start', 'resume', 'off', 'stop', 'pause', 'status', 'now', 'send', 'clear', 'delete', 'remove']
+    const bulkCommands = ['set', 'configure', 'add', 'edit', 'on', 'start', 'resume', 'off', 'stop', 'pause', 'status', 'now', 'send', 'clear', 'delete', 'remove']
     const bulkTarget = action === 'all' ? 'all' : String(args[0] || '')
     const allActionAliases = ['on', 'start', 'resume', 'off', 'stop', 'pause', 'status', 'now', 'send', 'clear', 'delete', 'remove']
     const bulkAction = action === 'all' ? (allActionAliases.includes(String(args[0] || '').toLowerCase()) ? String(args[0]).toLowerCase() : 'set') : action
@@ -525,7 +546,7 @@ async function advertCommand(sock, chatId, message, userMessage, context = {}) {
         if (!targets.length) return reply(sock, chatId, message, '📢 No participating groups were found.')
         const targetIds = targets.map((target) => target.jid)
         const targetLabel = bulkTarget.toLowerCase() === 'all' ? `all ${targets.length} participating groups` : `${targets.length} selected groups`
-        if (['set', 'configure', 'add'].includes(bulkAction)) {
+        if (['set', 'configure', 'add', 'edit'].includes(bulkAction)) {
           const payload = action === 'all' ? rest : textAfterFirstToken(rest)
           const separator = payload.indexOf('|')
           const intervalMs = parseInterval(separator < 0 ? payload : payload.slice(0, separator))
@@ -542,12 +563,12 @@ async function advertCommand(sock, chatId, message, userMessage, context = {}) {
           for (const groupId of targetIds) {
             const current = state.groups[groupId]
             if (current?.media) oldMedia.push(current.media)
-            state.groups[groupId] = { enabled: false, intervalMs, message: advertText || '', media, nextAt: Date.now() + intervalMs, sentCount: Number(current?.sentCount || 0), updatedAt: Date.now() }
+            state.groups[groupId] = { enabled: bulkAction === 'edit' ? current?.enabled === true : false, intervalMs, message: advertText || '', media: hasMedia ? media : (current?.media || null), nextAt: Date.now() + intervalMs, sentCount: Number(current?.sentCount || 0), updatedAt: Date.now() }
           }
           const saved = saveState(state)
           if (saved) removeUnusedAdvertMedia(state, oldMedia)
-          return replyInteractive(sock, chatId, message, `${saved ? '✅' : '⚠️'} One advert ${saved ? 'saved' : 'prepared but not persisted'} for *${targetLabel}* and is currently *OFF*.
-Use ".advert on ${bulkTarget}" to enable it.`, [{ id: `.advert on ${bulkTarget}`, label: `Enable ${bulkTarget}` }, { id: `.advert status ${bulkTarget}`, label: 'View status' }])
+          return replyInteractive(sock, chatId, message, `${saved ? '✅' : '⚠️'} One advert ${saved ? (bulkAction === 'edit' ? 'updated' : 'saved') : 'prepared but not persisted'} for *${targetLabel}*.
+${bulkAction === 'edit' ? 'Existing ON/OFF states were preserved.' : `Use ".advert on ${bulkTarget}" to enable it.`}`, [{ id: `.advert on ${bulkTarget}`, label: `Enable ${bulkTarget}` }, { id: `.advert status ${bulkTarget}`, label: 'View status' }])
         }
         if (['clear', 'delete', 'remove'].includes(bulkAction)) {
           const oldMedia = []
@@ -581,7 +602,7 @@ Use ".advert on ${bulkTarget}" to enable it.`, [{ id: `.advert on ${bulkTarget}`
     }
     const targetCandidate = String(args[0] || '')
     const targetLike = /^\d{1,3}$/.test(targetCandidate) || /^\d+[-\d]*@g\.us$/i.test(targetCandidate) || /^\d{4,}[-\d]*$/.test(targetCandidate)
-    const targetAction = action === 'group' || (['set', 'configure', 'add', 'on', 'start', 'resume', 'off', 'stop', 'pause', 'status', 'now', 'send', 'clear', 'delete', 'remove'].includes(action) && targetLike)
+    const targetAction = action === 'group' || (['set', 'configure', 'add', 'edit', 'on', 'start', 'resume', 'off', 'stop', 'pause', 'status', 'now', 'send', 'clear', 'delete', 'remove'].includes(action) && targetLike)
     if (targetAction) {
       let dmAction = action
       let targetToken = args[0]
@@ -600,7 +621,7 @@ Use ".advert on ${bulkTarget}" to enable it.`, [{ id: `.advert on ${bulkTarget}`
           if (target.error) return reply(sock, chatId, message, target.error)
           const groupId = target.jid
           const current = state.groups[groupId]
-          if (['set', 'configure', 'add'].includes(dmAction)) {
+          if (['set', 'configure', 'add', 'edit'].includes(dmAction)) {
             const payload = textAfterFirstToken(rest)
             const separator = payload.indexOf('|')
             const intervalMs = parseInterval(separator < 0 ? payload : payload.slice(0, separator))
@@ -613,10 +634,10 @@ Use ".advert on ${bulkTarget}" to enable it.`, [{ id: `.advert on ${bulkTarget}`
               try { media = await saveAdvertMedia(message, groupId) } catch (error) { return reply(sock, chatId, message, `❌ Could not save the advert image: ${error.message || error}`) }
             }
             if (!advertText && !media) return reply(sock, chatId, message, '❌ Add advert text or reply to an image.')
-            state.groups[groupId] = { enabled: false, intervalMs, message: advertText || '', media, nextAt: Date.now() + intervalMs, sentCount: Number(current?.sentCount || 0), updatedAt: Date.now() }
+            state.groups[groupId] = { enabled: dmAction === 'edit' ? current?.enabled === true : false, intervalMs, message: advertText || '', media, nextAt: Date.now() + intervalMs, sentCount: Number(current?.sentCount || 0), updatedAt: Date.now() }
             const saved = saveState(state)
             if (saved && current?.media && current.media.file !== media?.file) removeAdvertMedia(current.media)
-            return reply(sock, chatId, message, `${saved ? '✅' : '⚠️'} Advert ${saved ? 'saved' : 'prepared but could not be persisted'} for *${target.subject || groupId}* and is currently *OFF*.\nUse ".advert on ${targetToken}" to start it.`)
+            return reply(sock, chatId, message, `${saved ? '✅' : '⚠️'} Advert ${saved ? (dmAction === 'edit' ? 'updated' : 'saved') : 'prepared but could not be persisted'} for *${target.subject || groupId}*${dmAction === 'edit' ? `. Existing state is preserved (${current?.enabled ? 'ON' : 'OFF'}).` : ' and is currently *OFF*.'}${dmAction === 'edit' ? '' : `\nUse ".advert on ${targetToken}" to start it.`}`)
           }
           if (!current) return reply(sock, chatId, message, '📢 No advert is configured for that group.')
           if (['clear', 'delete', 'remove'].includes(dmAction)) {

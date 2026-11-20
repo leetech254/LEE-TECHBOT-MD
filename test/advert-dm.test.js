@@ -102,3 +102,49 @@ test('owner DM clear removes all group adverts but preserves channel settings', 
     else fs.writeFileSync(advert.SETTINGS_PATH, original)
   }
 })
+
+
+test('owner DM edit lists configured adverts with names, IDs, type, state, and preview', async () => {
+  const original = fs.existsSync(advert.SETTINGS_PATH) ? fs.readFileSync(advert.SETTINGS_PATH) : null
+  try {
+    fs.rmSync(advert.SETTINGS_PATH, { force: true })
+    advert.saveState({ version: 1, groups: {
+      '111@g.us': { enabled: true, intervalMs: 3600000, message: 'Buy now', nextAt: Date.now() },
+      '222@g.us': { enabled: false, intervalMs: 7200000, message: 'Support offer' }
+    } })
+    const sock = socket()
+    const chatId = '254700000000@s.whatsapp.net'
+    const message = { key: { remoteJid: chatId }, message: { conversation: '.advert edit' } }
+    await advert.advertCommand(sock, chatId, message, '.advert edit', { isOwnerOrSudoCheck: true, isGroup: false })
+    const output = sock.sent.at(-1).payload.text
+    assert.match(output, /EDIT ADVERTS/)
+    assert.match(output, /Sales Group/)
+    assert.match(output, /111@g\.us/)
+    assert.match(output, /Type: \*Text\* \| Status: \*ON\*/)
+    assert.match(output, /Buy now/)
+    assert.ok(Array.isArray(sock.sent.at(-1).payload.buttons))
+  } finally {
+    restore(advert.SETTINGS_PATH, original)
+  }
+})
+
+test('owner DM single edit updates text and interval while preserving enabled state', async () => {
+  const original = fs.existsSync(advert.SETTINGS_PATH) ? fs.readFileSync(advert.SETTINGS_PATH) : null
+  try {
+    fs.rmSync(advert.SETTINGS_PATH, { force: true })
+    advert.saveState({ version: 1, groups: {
+      '111@g.us': { enabled: true, intervalMs: 3600000, message: 'Old text', nextAt: Date.now(), sentCount: 4 }
+    } })
+    const sock = socket()
+    const chatId = '254700000000@s.whatsapp.net'
+    const message = { key: { remoteJid: chatId }, message: { conversation: '.advert edit 1 2h | New text' } }
+    await advert.advertCommand(sock, chatId, message, '.advert edit 1 2h | New text', { isOwnerOrSudoCheck: true, isGroup: false })
+    const config = advert.loadState().groups['111@g.us']
+    assert.equal(config.message, 'New text')
+    assert.equal(config.intervalMs, 7200000)
+    assert.equal(config.enabled, true)
+    assert.equal(config.sentCount, 4)
+  } finally {
+    restore(advert.SETTINGS_PATH, original)
+  }
+})
