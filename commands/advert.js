@@ -179,6 +179,7 @@ function advertHelp() {
     '• `.advert set 1,3 6h | Your advert text` — configure selected groups',
     '• `.advert on/off/status/now/clear all` — manage all configured groups',
     '• `.advert all on/off/status/now/clear` — shortcut for all groups',
+    '• `.advert clear` — clear all group adverts from owner DM',
     '• `.advert schedule` — show active adverts and next broadcast times',
     '• `.advert on/off/status/now/clear <group number>` — manage one group',
     '• `.advert status` — view all enabled groups',
@@ -221,9 +222,15 @@ function ownerDmStatus(state) {
     const stateLabel = config.enabled ? 'ON' : 'OFF'
     const delivery = config.lastDelivery || 'not sent'
     const next = config.enabled && config.nextAt ? new Date(config.nextAt).toLocaleString() : 'paused'
-    return `${index + 1}. ${tick}${groupId}${tick}\n   Status: *${stateLabel}* | Delivery: *${delivery}* | Sent: *${Number(config.sentCount || 0)}*\n   Next: ${next}`
+    return `${index + 1}. ${tick}${groupId}${tick}\n   Type: *${advertContentType(config)}*\n   Status: *${stateLabel}* | Delivery: *${delivery}* | Sent: *${Number(config.sentCount || 0)}*\n   Next: ${next}`
   })
   return `📢 *ADVERT GROUPS*\n\n${lines.join('\n\n')}`
+}
+
+function advertContentType(config = {}) {
+  if (config.media?.type === 'image' && config.message) return 'Image + caption'
+  if (config.media?.type === 'image') return 'Image'
+  return 'Text'
 }
 
 function ownerDmScheduleStatus(state) {
@@ -235,7 +242,7 @@ function ownerDmScheduleStatus(state) {
   const lines = active.map(([groupId, config], index) => {
     const nextAt = Number(config.nextAt || 0)
     const next = nextAt > 0 ? new Date(nextAt).toLocaleString() : 'waiting for scheduler'
-    return `${index + 1}. ${tick}${groupId}${tick}\n   Interval: *${formatInterval(config.intervalMs)}*\n   Next broadcast: *${next}*\n   Last delivery: *${config.lastDelivery || 'not sent'}*\n   Sent: *${Number(config.sentCount || 0)}*`
+    return `${index + 1}. ${tick}${groupId}${tick}\n   Type: *${advertContentType(config)}*\n   Interval: *${formatInterval(config.intervalMs)}*\n   Next broadcast: *${next}*\n   Last delivery: *${config.lastDelivery || 'not sent'}*\n   Sent: *${Number(config.sentCount || 0)}*`
   })
   return `📅 *ACTIVE ADVERT SCHEDULE*\n\n${lines.join('\n\n')}`
 }
@@ -475,6 +482,18 @@ async function advertCommand(sock, chatId, message, userMessage, context = {}) {
         { id: '.advert off all', label: 'Pause all' }
       ])
     }
+    if (action === 'clear' && args.length === 0) {
+      const oldMedia = Object.values(state.groups || {}).map((config) => config?.media).filter(Boolean)
+      const removed = Object.keys(state.groups || {}).filter((groupId) => groupId.endsWith('@g.us')).length
+      for (const groupId of Object.keys(state.groups || {})) {
+        if (groupId.endsWith('@g.us')) delete state.groups[groupId]
+      }
+      const saved = saveState(state)
+      if (saved) removeUnusedAdvertMedia(state, oldMedia)
+      return reply(sock, chatId, message, saved
+        ? `✅ Cleared *${removed}* advert configuration(s) from all groups. Channel settings were not changed.`
+        : '⚠️ Could not persist clearing the adverts because storage is full.')
+    }
     // DM group syntax: `.advert set <list number|full group number> 6h | text`
     // and `.advert on|off|status|now|clear <target>`.
     const bulkCommands = ['set', 'configure', 'add', 'on', 'start', 'resume', 'off', 'stop', 'pause', 'status', 'now', 'send', 'clear', 'delete', 'remove']
@@ -523,7 +542,7 @@ Use ".advert on ${bulkTarget}" to enable it.`, [{ id: `.advert on ${bulkTarget}`
           const tick = String.fromCharCode(96)
           const lines = targets.map((target, index) => {
             const config = state.groups[target.jid]
-            return `${index + 1}. ${tick}${target.number}${tick} — *${config ? (config.enabled ? 'ON' : 'OFF') : 'NOT CONFIGURED'}*`
+            return `${index + 1}. ${tick}${target.number}${tick} — *${config ? (config.enabled ? 'ON' : 'OFF') : 'NOT CONFIGURED'}*${config ? `\n   Type: *${advertContentType(config)}*` : ''}`
           })
           return replyInteractive(sock, chatId, message, `📢 *BULK ADVERT STATUS*\n\n${lines.join('\n')}`, [{ id: `.advert on ${bulkTarget}`, label: `Enable ${bulkTarget}` }, { id: `.advert off ${bulkTarget}`, label: `Pause ${bulkTarget}` }])
         }

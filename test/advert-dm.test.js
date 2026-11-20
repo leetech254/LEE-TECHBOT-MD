@@ -70,9 +70,32 @@ test('owner DM schedule lists active adverts and next broadcast times', async ()
     const output = sock.sent.at(-1).payload.text
     assert.match(output, /ACTIVE ADVERT SCHEDULE/)
     assert.match(output, /111@g\.us/)
+    assert.match(output, /Type: \*Text\*/)
     assert.match(output, /Next broadcast:/)
     assert.doesNotMatch(output, /222@g\.us/)
     assert.ok(Array.isArray(sock.sent.at(-1).payload.buttons))
+  } finally {
+    if (original === null) fs.rmSync(advert.SETTINGS_PATH, { force: true })
+    else fs.writeFileSync(advert.SETTINGS_PATH, original)
+  }
+})
+
+test('owner DM clear removes all group adverts but preserves channel settings', async () => {
+  const original = fs.existsSync(advert.SETTINGS_PATH) ? fs.readFileSync(advert.SETTINGS_PATH) : null
+  try {
+    fs.rmSync(advert.SETTINGS_PATH, { force: true })
+    advert.saveState({ version: 1, channelJids: ['777@newsletter'], channelForwardingEnabled: true, groups: {
+      '111@g.us': { enabled: true, intervalMs: 3600000, message: 'Text advert' },
+      '222@g.us': { enabled: false, intervalMs: 7200000, message: 'Paused advert' }
+    } })
+    const sock = socket()
+    const chatId = '254700000000@s.whatsapp.net'
+    const message = { key: { remoteJid: chatId }, message: { conversation: '.advert clear' } }
+    await advert.advertCommand(sock, chatId, message, '.advert clear', { isOwnerOrSudoCheck: true, isGroup: false })
+    const state = advert.loadState()
+    assert.deepEqual(state.groups, {})
+    assert.deepEqual(state.channelJids, ['777@newsletter'])
+    assert.match(sock.sent.at(-1).payload.text, /Cleared \*2\* advert configuration/)
   } finally {
     if (original === null) fs.rmSync(advert.SETTINGS_PATH, { force: true })
     else fs.writeFileSync(advert.SETTINGS_PATH, original)
