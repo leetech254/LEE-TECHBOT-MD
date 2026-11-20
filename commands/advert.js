@@ -5,6 +5,7 @@ const path = require('path')
 const crypto = require('crypto')
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys')
 const { resolveAuthDir } = require('../lib/storagePaths')
+const { resolveGroupTarget, fetchParticipatingGroups } = require('../lib/groupTarget')
 
 // Keep schedules beside the auth files. The existing durable auth store then
 // includes them in the immutable S3/Bucketeer session generations.
@@ -15,6 +16,7 @@ const TICK_MS = 60 * 1000
 let activeSocket = null
 let schedulerTimer = null
 const sending = new Set()
+let storageWarningShown = false
 
 function ensureDir() {
   fs.mkdirSync(path.dirname(SETTINGS_PATH), { recursive: true })
@@ -41,14 +43,24 @@ function loadState() {
 }
 
 function saveState(state) {
-  ensureDir()
   const temporary = `${SETTINGS_PATH}.${process.pid}.tmp`
-  const selectedChannels = Array.isArray(state.channelJids)
-    ? state.channelJids.filter((jid) => /^\d+@newsletter$/.test(jid))
-    : (/^\d+@newsletter$/.test(state.channelJid || '') ? [state.channelJid] : [])
-  fs.writeFileSync(temporary, JSON.stringify({ version: 1, groups: state.groups, channelJids: selectedChannels, channelJid: selectedChannels[0] || null, channelForwardingEnabled: state.channelForwardingEnabled === true, channelMessageIds: state.channelMessageIds || [] }, null, 2), { mode: 0o600 })
-  fs.renameSync(temporary, SETTINGS_PATH)
-  requestDurableSync()
+  try {
+    ensureDir()
+    const selectedChannels = Array.isArray(state.channelJids)
+      ? state.channelJids.filter((jid) => /^\d+@newsletter$/.test(jid))
+      : (/^\d+@newsletter$/.test(state.channelJid || '') ? [state.channelJid] : [])
+    fs.writeFileSync(temporary, JSON.stringify({ version: 1, groups: state.groups, channelJids: selectedChannels, channelJid: selectedChannels[0] || null, channelForwardingEnabled: state.channelForwardingEnabled === true, channelMessageIds: Array.isArray(state.channelMessageIds) ? state.channelMessageIds.slice(-100) : [] }, null, 2), { mode: 0o600 })
+    fs.renameSync(temporary, SETTINGS_PATH)
+    requestDurableSync()
+    return true
+  } catch (error) {
+    try { fs.rmSync(temporary, { force: true }) } catch (_) {}
+    if (!storageWarningShown) {
+      storageWarningShown = true
+      console.warn(`[advert] Advert settings were not saved: ${error.message || error}`)
+    }
+    return false
+  }
 }
 
 function unwrapMessage(content) {
@@ -85,8 +97,20 @@ async function saveAdvertMedia(message, groupId) {
   if (!buffer.length || buffer.length > 10 * 1024 * 1024) throw new Error('image is empty or larger than 10 MB')
   const filename = `advert-${crypto.createHash('sha1').update(groupId).digest('hex').slice(0, 12)}-${Date.now()}.jpg`
   ensureDir()
-  fs.writeFileSync(path.join(path.dirname(SETTINGS_PATH), filename), buffer, { mode: 0o600 })
+  const target = path.join(path.dirname(SETTINGS_PATH), filename)
+  try {
+    fs.writeFileSync(target, buffer, { mode: 0o600 })
+  } catch (error) {
+    try { fs.rmSync(target, { force: true }) } catch (_) {}
+    throw error
+  }
   return { type: media.type, file: filename }
+}
+
+function removeAdvertMedia(media) {
+  const file = media?.file
+  if (!file || path.basename(file) !== file || !/^advert-[\w-]+\.jpg$/i.test(file)) return
+  try { fs.rmSync(path.join(path.dirname(SETTINGS_PATH), file), { force: true }) } catch (_) {}
 }
 
 function parseInterval(value) {
@@ -131,6 +155,9 @@ function advertHelp() {
     '• `.advert clear` — remove the saved advert',
     '',
     'From the owner DM:',
+    '• `.advert groups` — list groups with numbers for DM setup',
+    '• `.advert set <group number> 6h | Your advert text` — configure a group',
+    '• `.advert on/off/status/now/clear <group number>` — manage one group',
     '• `.advert status` — view all enabled groups',
     '• `.advert now` — send each enabled advert immediately',
     '• `.advert channel on` — show available channels and enable forwarding',
@@ -330,6 +357,91 @@ async function advertCommand(sock, chatId, message, userMessage, context = {}) {
 
   if (!context.isGroup || !chatId.endsWith('@g.us')) {
     if (action === 'help') return reply(sock, chatId, message, advertHelp())
+    if (action === 'groups' || action === 'list') {
+      try {
+        const groups = await fetchParticipatingGroups(sock)
+        if (!groups.length) return reply(sock, chatId, message, '📢 The bot is not participating in any groups.')
+        const lines = groups.map((group) => {
+          const config = state.groups[group.jid]
+          return `${group.index}. *${group.subject}*\n   Group: ${group.number}\n   Advert: *${config?.enabled ? 'ON' : config ? 'OFF' : 'NOT CONFIGURED'}*`
+        })
+        return reply(sock, chatId, message, `📋 *ADVERT GROUPS*\n\n${lines.join('\n\n')}\n\nUse: .advert set <list number> 6h | Your advert text`)
+      } catch (error) {
+        return reply(sock, chatId, message, `❌ Could not list groups: ${error.message || error}`)
+      }
+    }
+    // DM group syntax: `.advert set <list number|full group number> 6h | text`
+    // and `.advert on|off|status|now|clear <target>`.
+    const targetCandidate = String(args[0] || '')
+    const targetLike = /^\d{1,3}$/.test(targetCandidate) || /^\d+[-\d]*@g\.us$/i.test(targetCandidate) || /^\d{4,}[-\d]*$/.test(targetCandidate)
+    const targetAction = action === 'group' || (['set', 'configure', 'add', 'on', 'start', 'resume', 'off', 'stop', 'pause', 'status', 'now', 'send', 'clear', 'delete', 'remove'].includes(action) && targetLike)
+    if (targetAction) {
+      let dmAction = action
+      let targetToken = args[0]
+      if (action === 'group') {
+        dmAction = String(args[1] || '').toLowerCase()
+        targetToken = args[0]
+      }
+      if (!targetToken) {
+        return reply(sock, chatId, message, 'Usage: `.advert groups`, then `.advert set <group number> 6h | Your advert text`')
+      }
+      if (targetAction) {
+        // For set, the target is the first token and the remaining text keeps
+        // multiline content intact, including the interval separator.
+        try {
+          const target = await resolveGroupTarget(sock, chatId, targetToken)
+          if (target.error) return reply(sock, chatId, message, target.error)
+          const groupId = target.jid
+          const current = state.groups[groupId]
+          if (['set', 'configure', 'add'].includes(dmAction)) {
+            const payload = args.slice(1).join(' ')
+            const separator = payload.indexOf('|')
+            const intervalMs = parseInterval(separator < 0 ? payload : payload.slice(0, separator))
+            const advertText = separator < 0 ? captionFromCommand(message) : payload.slice(separator + 1).trim()
+            const hasMedia = Boolean(mediaFromCommand(message))
+            if (!intervalMs) return reply(sock, chatId, message, '❌ Invalid interval. Use `.advert set <group number> 10m–30d | Your advert text`.')
+            if (advertText.length > 2000) return reply(sock, chatId, message, '❌ Advert caption must not exceed 2000 characters.')
+            let media = current?.media || null
+            if (hasMedia) {
+              try { media = await saveAdvertMedia(message, groupId) } catch (error) { return reply(sock, chatId, message, `❌ Could not save the advert image: ${error.message || error}`) }
+            }
+            if (!advertText && !media) return reply(sock, chatId, message, '❌ Add advert text or reply to an image.')
+            state.groups[groupId] = { enabled: false, intervalMs, message: advertText || '', media, nextAt: Date.now() + intervalMs, sentCount: Number(current?.sentCount || 0), updatedAt: Date.now() }
+            const saved = saveState(state)
+            if (saved && current?.media && current.media.file !== media?.file) removeAdvertMedia(current.media)
+            return reply(sock, chatId, message, `${saved ? '✅' : '⚠️'} Advert ${saved ? 'saved' : 'prepared but could not be persisted'} for *${target.subject || groupId}* and is currently *OFF*.\nUse ".advert on ${targetToken}" to start it.`)
+          }
+          if (!current) return reply(sock, chatId, message, '📢 No advert is configured for that group.')
+          if (['clear', 'delete', 'remove'].includes(dmAction)) {
+            const oldMedia = current.media
+            delete state.groups[groupId]
+            const saved = saveState(state)
+            if (saved) removeAdvertMedia(oldMedia)
+            return reply(sock, chatId, message, saved ? '✅ Advert configuration removed.' : '⚠️ Could not persist the removal because storage is full.')
+          }
+          if (dmAction === 'status') {
+            return reply(sock, chatId, message, `📢 *ADVERT STATUS*\n\nGroup: *${target.subject || groupId}*\nStatus: *${current.enabled ? 'ON' : 'OFF'}*\nInterval: *${formatInterval(current.intervalMs)}*\nSent: *${Number(current.sentCount || 0)}*\nMessage:\n${current.message || '(image advert)'}`)
+          }
+          if (['on', 'start', 'resume'].includes(dmAction)) {
+            current.enabled = true
+            current.nextAt = Math.max(Date.now() + current.intervalMs, Number(current.nextAt || 0))
+            const saved = saveState(state)
+            return reply(sock, chatId, message, saved ? `✅ Advertising is ON for *${target.subject || groupId}*.` : '⚠️ Could not persist the setting because storage is full.')
+          }
+          if (['off', 'stop', 'pause'].includes(dmAction)) {
+            current.enabled = false
+            const saved = saveState(state)
+            return reply(sock, chatId, message, saved ? `✅ Advertising is OFF for *${target.subject || groupId}*.` : '⚠️ Could not persist the setting because storage is full.')
+          }
+          if (['now', 'send'].includes(dmAction)) {
+            const sent = await sendAdvert(sock, groupId, current, true)
+            return reply(sock, chatId, message, sent ? `✅ Advert sent to *${target.subject || groupId}*.` : '❌ Advert delivery failed; the bot will retry on schedule.')
+          }
+        } catch (error) {
+          return reply(sock, chatId, message, `❌ Advert group operation failed: ${error.message || error}`)
+        }
+      }
+    }
     if (action === 'channel') {
       const channelAction = String(args[0] || '').toLowerCase()
       if (channelAction === 'status') {
