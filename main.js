@@ -338,6 +338,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 return await ownerCommand(sock, chatId);
             } else if (buttonId === 'support') {
                 return await sock.sendMessage(chatId, { text: `🔗 *Support*\n\nhttps://chat.whatsapp.com/LIjzygth3mvBKUxwgN6zYt?mode=gi_t` }, { quoted: message });
+            } else if (buttonId) {
+                // Re-enter the normal command router so menu, advert, and
+                // other button commands behave exactly like typed commands.
+                message.message = { conversation: buttonId };
             }
         }
 

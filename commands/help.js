@@ -376,13 +376,39 @@ function interactiveMenuPayload(categoryKey = '') {
 async function sendInteractiveMenu(sock, chatId, message, categoryKey = '') {
     const payload = interactiveMenuPayload(categoryKey);
     if (!payload) return false;
+    const p = prefix();
+    const buttonItems = categoryKey
+        ? (getCategory(categoryKey)?.commands || []).map((command) => ({ id: `${p}${command}`, label: `${p}${command}` }))
+        : MENU_CATEGORIES.map((category) => ({ id: `${p}menu ${category.key}`, label: category.title }));
+    let delivered = false;
     try {
         await sock.sendMessage(chatId, payload, { quoted: message });
-        return true;
+        delivered = true;
     } catch (error) {
         console.warn('[menu] Interactive list unavailable; using text fallback:', error.message || error);
-        return false;
     }
+    // Some WhatsApp clients accept the list payload but render only its text.
+    // Send compact button pages as a second, universally supported navigation
+    // layer so every category/command remains tappable.
+    for (let index = 0; index < buttonItems.length; index += 3) {
+        const page = buttonItems.slice(index, index + 3).map((item) => ({
+            buttonId: item.id,
+            buttonText: { displayText: item.label.slice(0, 20) },
+            type: 1
+        }));
+        try {
+            await sock.sendMessage(chatId, {
+                text: `${categoryKey ? `🧭 ${getCategory(categoryKey).title}` : '🧭 LEE TECH MENU'} — ${index + 1}-${Math.min(index + 3, buttonItems.length)}/${buttonItems.length}`,
+                footer: 'Tap a button or use the text/list above',
+                buttons: page,
+                headerType: 1
+            }, { quoted: message });
+            delivered = true;
+        } catch (error) {
+            console.warn('[menu] Button navigation page unavailable:', error.message || error);
+        }
+    }
+    return delivered;
 }
 
 function buildDetails(topic) {
