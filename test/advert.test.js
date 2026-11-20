@@ -69,8 +69,8 @@ test('advert set is off by default and owner can turn one group on', async () =>
     assert.match(sock.sent.at(-1).payload.text, /ADVERT STATUS/)
 
     await advert.advertCommand(sock, '123@g.us', message(), '.advert now', context)
-    assert.equal(sock.sent.filter((entry) => entry.chatId === '123@g.us' && /ADVERTISEMENT/.test(entry.payload.text)).length, 1)
-    assert.match(sock.sent.find((entry) => entry.payload.text.includes('ADVERTISEMENT')).payload.text, /Buy our service/)
+    assert.equal(sock.sent.filter((entry) => entry.chatId === '123@g.us' && /Powered by LEE TECH/.test(entry.payload.text)).length, 1)
+    assert.match(sock.sent.find((entry) => entry.payload.text.includes('Powered by LEE TECH')).payload.text, /Buy our service/)
     assert.equal(advert.loadState().groups['123@g.us'].lastDelivery, 'sent')
     assert.equal(advert.loadState().groups['123@g.us'].lastMessageId, '4')
 
@@ -113,9 +113,24 @@ test('owner DM can inspect and immediately broadcast to enabled groups', async (
     assert.match(sock.sent.at(-1).payload.text, /333@g\.us/)
 
     await advert.advertCommand(sock, '254700000000@s.whatsapp.net', dm, '.advert now', context)
-    const deliveries = sock.sent.filter((entry) => /ADVERTISEMENT/.test(entry.payload.text))
+    const deliveries = sock.sent.filter((entry) => /Powered by LEE TECH/.test(entry.payload.text))
     assert.deepEqual(deliveries.map((entry) => entry.chatId).sort(), ['111@g.us', '222@g.us'])
     assert.match(sock.sent.at(-1).payload.text, /Sent: \*2\/2\* enabled groups/)
+  } finally {
+    if (original === null) fs.rmSync(advert.SETTINGS_PATH, { force: true })
+    else fs.writeFileSync(advert.SETTINGS_PATH, original)
+  }
+})
+
+test('scheduled advert preserves spaces and appends only the LEE TECH footer', async () => {
+  const original = fs.existsSync(advert.SETTINGS_PATH) ? fs.readFileSync(advert.SETTINGS_PATH) : null
+  try {
+    fs.rmSync(advert.SETTINGS_PATH, { force: true })
+    advert.saveState({ version: 1, groups: { '123@g.us': { enabled: true, intervalMs: 3600000, message: '  First line  \nSecond   line', media: null } } })
+    const sock = mockSocket()
+    await advert.sendAdvert(sock, '123@g.us', advert.loadState().groups['123@g.us'], true)
+    assert.equal(sock.sent[0].payload.text, '  First line  \nSecond   line\n\n*Powered by LEE TECH*')
+    assert.doesNotMatch(sock.sent[0].payload.text, /ADVERTISEMENT/)
   } finally {
     if (original === null) fs.rmSync(advert.SETTINGS_PATH, { force: true })
     else fs.writeFileSync(advert.SETTINGS_PATH, original)
@@ -133,7 +148,7 @@ test('image adverts send an image payload with the saved caption', async () => {
     const sock = mockSocket()
     assert.equal(await advert.sendAdvert(sock, '123@g.us', advert.loadState().groups['123@g.us'], true), true)
     assert.deepEqual(sock.sent[0].payload.image, Buffer.from('fake-image'))
-    assert.equal(sock.sent[0].payload.caption, '📢 *ADVERTISEMENT*\n\nImage caption')
+    assert.equal(sock.sent[0].payload.caption, 'Image caption\n\n*Powered by LEE TECH*')
   } finally {
     fs.rmSync(mediaPath, { force: true })
     if (original === null) fs.rmSync(advert.SETTINGS_PATH, { force: true })

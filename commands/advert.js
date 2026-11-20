@@ -82,9 +82,20 @@ function mediaFromCommand(message) {
 function captionFromCommand(message, fallback = '') {
   const direct = unwrapMessage(message?.message)
   const quoted = unwrapMessage(quotedContent(message))
-  const directCaption = String(direct?.imageMessage?.caption || '').trim()
+  const normalize = (value) => String(value || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const directCaption = normalize(direct?.imageMessage?.caption)
   const usableDirectCaption = /^\.advert(?:\s|$)/i.test(directCaption) ? '' : directCaption
-  return String(fallback || usableDirectCaption || quoted?.imageMessage?.caption || '').trim()
+  return normalize(fallback || usableDirectCaption || quoted?.imageMessage?.caption)
+}
+
+function captionAfterSeparator(payload, separator) {
+  // Remove only the conventional space immediately after `|`; preserve every
+  // additional space, newline, and character supplied by the user.
+  return String(payload || '').slice(separator + 1).replace(/^\s/, '')
+}
+
+function textAfterFirstToken(value) {
+  return String(value || '').replace(/^\S+\s*/, '')
 }
 
 async function saveAdvertMedia(message, groupId) {
@@ -355,7 +366,8 @@ async function sendAdvert(sock, groupId, config, immediate = false) {
   if (!sock || !groupId.endsWith('@g.us') || sending.has(groupId)) return false
   sending.add(groupId)
   try {
-    const body = `📢 *ADVERTISEMENT*\n\n${config.message || ''}`.trim()
+    const content = String(config.message || '')
+    const body = content ? `${content}\n\n*Powered by LEE TECH*` : '*Powered by LEE TECH*'
     let payload = { text: body }
     if (config.media?.type === 'image' && config.media.file) {
       const mediaPath = path.join(path.dirname(SETTINGS_PATH), config.media.file)
@@ -453,10 +465,10 @@ async function advertCommand(sock, chatId, message, userMessage, context = {}) {
         const targetIds = targets.map((target) => target.jid)
         const targetLabel = bulkTarget.toLowerCase() === 'all' ? `all ${targets.length} participating groups` : `${targets.length} selected groups`
         if (['set', 'configure', 'add'].includes(bulkAction)) {
-          const payload = action === 'all' ? args.join(' ') : args.slice(1).join(' ')
+          const payload = action === 'all' ? rest : textAfterFirstToken(rest)
           const separator = payload.indexOf('|')
           const intervalMs = parseInterval(separator < 0 ? payload : payload.slice(0, separator))
-          const advertText = separator < 0 ? captionFromCommand(message) : payload.slice(separator + 1).trim()
+          const advertText = separator < 0 ? captionFromCommand(message) : captionAfterSeparator(payload, separator)
           const hasMedia = Boolean(mediaFromCommand(message))
           if (!intervalMs) return reply(sock, chatId, message, '❌ Invalid interval. Use `.advert set all 6h | Your advert text` or `.advert set 1,3 6h | Your advert text`.')
           if (advertText.length > 2000) return reply(sock, chatId, message, '❌ Advert caption must not exceed 2000 characters.')
@@ -528,10 +540,10 @@ Use ".advert on ${bulkTarget}" to enable it.`, [{ id: `.advert on ${bulkTarget}`
           const groupId = target.jid
           const current = state.groups[groupId]
           if (['set', 'configure', 'add'].includes(dmAction)) {
-            const payload = args.slice(1).join(' ')
+            const payload = textAfterFirstToken(rest)
             const separator = payload.indexOf('|')
             const intervalMs = parseInterval(separator < 0 ? payload : payload.slice(0, separator))
-            const advertText = separator < 0 ? captionFromCommand(message) : payload.slice(separator + 1).trim()
+            const advertText = separator < 0 ? captionFromCommand(message) : captionAfterSeparator(payload, separator)
             const hasMedia = Boolean(mediaFromCommand(message))
             if (!intervalMs) return reply(sock, chatId, message, '❌ Invalid interval. Use `.advert set <group number> 10m–30d | Your advert text`.')
             if (advertText.length > 2000) return reply(sock, chatId, message, '❌ Advert caption must not exceed 2000 characters.')
@@ -683,7 +695,7 @@ Use ".advert on ${bulkTarget}" to enable it.`, [{ id: `.advert on ${bulkTarget}`
     const payload = rest
     const separator = payload.indexOf('|')
     const intervalMs = parseInterval(separator < 0 ? payload : payload.slice(0, separator))
-    const advertText = separator < 0 ? captionFromCommand(message) : payload.slice(separator + 1).trim()
+    const advertText = separator < 0 ? captionFromCommand(message) : captionAfterSeparator(payload, separator)
     const hasMedia = Boolean(mediaFromCommand(message))
     if (separator < 0 && !hasMedia) return reply(sock, chatId, message, 'Usage: `.advert set 6h | Your advert text`\nOr reply to an image with `.advert set 6h` to schedule the image.\nInterval must be between 10m and 30d.')
     if (!intervalMs) return reply(sock, chatId, message, '❌ Invalid interval. Use 10m–30d, for example `30m`, `6h`, or `2d`.')
